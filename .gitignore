@@ -1,0 +1,50 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# 环境变量
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 日志
+*.log
+logs/
+
+# 数据库迁移
+alembic/versions/*.py
+!alembic/versions/.gitkeep
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 前端文件
+node_modules/
+.npm-cache/
+
+# 调试与临时文件
+bing_debug.html
+*.db
+*.sqlite3
+
+# 上传文件
+uploads/
