@@ -31,7 +31,10 @@ import {
   TrashOutline,
   CopyOutline,
   RefreshOutline,
-  ArrowDownOutline
+  ArrowDownOutline,
+  MenuOutline,
+  CreateOutline,
+  EllipsisVertical
 } from '@vicons/ionicons5'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
@@ -91,6 +94,8 @@ const conversationId = ref<string>('')
 const messages = ref<any[]>([])
 const inputValue = ref('')
 const isLoading = ref(false)
+// 用于控制是否显示欢迎语，初始为 false，只有在确认是新会话后才显示
+const showWelcome = ref(false)
 const scrollContainerRef = ref<HTMLElement>()
 const innerRef = ref()
 const sending = ref(false)
@@ -471,10 +476,15 @@ const fetchMessages = async () => {
   try {
     const res: any = await getMessages(conversationId.value)
     messages.value = Array.isArray(res) ? res : (res.data || [])
-    // 解析 attachments
+    // 解析 attachments 和 action_buttons
     messages.value.forEach((msg: any) => {
-      if (msg.metadata_ && msg.metadata_.attachments) {
-        msg.attachments = msg.metadata_.attachments
+      if (msg.metadata_) {
+        if (msg.metadata_.attachments) {
+          msg.attachments = msg.metadata_.attachments
+        }
+        if (msg.metadata_.action_buttons) {
+          msg.actionButtons = msg.metadata_.action_buttons.map((a: any) => ({ ...a, disabled: false }))
+        }
       }
     })
     scrollToBottom()
@@ -490,12 +500,16 @@ watch(() => route.params.id, async (newId) => {
   if (newId && typeof newId === 'string') {
     if (newId === conversationId.value && messages.value.length > 0) return
     conversationId.value = newId
+    isLoading.value = true
     await fetchMessages()
+    // 加载完成后根据消息数量决定是否显示欢迎语
+    showWelcome.value = messages.value.length === 0
   } else {
     // 仅在非发送状态时才清空（避免新对话发送中被清空）
     if (!sending.value) {
       messages.value = []
       conversationId.value = ''
+      showWelcome.value = true
     }
   }
   // 任何路由改变都刷新一下列表
@@ -528,6 +542,7 @@ const handleSend = async () => {
         throw new Error('创建会话失败')
       }
       isNewConversation = true
+      fetchConversationList() // 立即更新侧边栏
       emit('refresh')
     } catch (error) {
       console.error(error)
@@ -651,6 +666,9 @@ const handleSend = async () => {
     sending.value = false
     scrollToBottom()
 
+    // 发送消息后，隐藏欢迎语
+    showWelcome.value = false
+
     // 流式结束后，如果是新会话，更新 URL
     if (isNewConversation && conversationId.value) {
       router.replace(`/chat/${conversationId.value}`)
@@ -698,11 +716,17 @@ const openImagePreview = (url: string) => {
 
 let resizeObserver: ResizeObserver | null = null
 
-onMounted(() => {
+onMounted(async () => {
   fetchConversationList()
   if (route.params.id && typeof route.params.id === 'string') {
     conversationId.value = route.params.id
-    fetchMessages()
+    isLoading.value = true
+    await fetchMessages()
+    // 加载完成后，如果没有消息才显示欢迎语
+    showWelcome.value = messages.value.length === 0
+  } else {
+    // 新会话
+    showWelcome.value = true
   }
 
   if (innerRef.value && scrollContainerRef.value) {
@@ -743,35 +767,43 @@ onUnmounted(() => {
       </div>
       
       <div class="sidebar-content" v-show="isSidebarOpen">
-        <!-- 第一个大按钮 -->
-        <div class="new-chat-btn" @click="handleNewChat" style="margin-left: -4px;">
-          <n-icon :size="18"><CreateOutline /></n-icon>
-          <span>New chat</span>
+        <div class="sidebar-pattern"></div>
+        
+        <!-- Fixed Top Section inside scrollable content area -->
+        <div class="sidebar-top-section">
+          <!-- 第一个大按钮 -->
+          <div class="new-chat-btn" @click="handleNewChat" style="margin-left: -4px;">
+            <n-icon :size="18"><CreateOutline /></n-icon>
+            <span>New chat</span>
+          </div>
+          
+          <div class="sidebar-menu-header">
+            <span>Chats</span>
+          </div>
         </div>
         
-        <!-- Chats List -->
-        <div class="sidebar-menu-header">
-          <span>Chats</span>
-        </div>
-        <div class="chat-history-list">
-          <div
-            v-for="convo in conversations"
-            :key="convo.id"
-            class="history-item"
-            :class="{ active: convo.id === conversationId }"
-            @click="handleSelectChat(convo.id)"
-          >
-            <span class="history-title">{{ convo.title || '新对话' }}</span>
-            <n-dropdown 
-              :options="chatOptions" 
-              placement="bottom-end"
-              trigger="click"
-              @select="(key: string) => handleChatOption(key, convo.id)"
+        <!-- Scrollable Section -->
+        <div class="chat-history-container">
+          <div class="chat-history-list">
+            <div
+              v-for="convo in conversations"
+              :key="convo.id"
+              class="history-item"
+              :class="{ active: convo.id === conversationId }"
+              @click="handleSelectChat(convo.id)"
             >
-              <div class="history-more-btn" @click.stop>
-                <n-icon :size="16"><EllipsisVertical /></n-icon>
-              </div>
-            </n-dropdown>
+              <span class="history-title">{{ convo.title || '新对话' }}</span>
+              <n-dropdown 
+                :options="chatOptions" 
+                placement="bottom-end"
+                trigger="click"
+                @select="(key: string) => handleChatOption(key, convo.id)"
+              >
+                <div class="history-more-btn" @click.stop>
+                  <n-icon :size="16"><EllipsisVertical /></n-icon>
+                </div>
+              </n-dropdown>
+            </div>
           </div>
         </div>
         
@@ -797,9 +829,6 @@ onUnmounted(() => {
       <!-- 顶部 Header: Hamburger toggle when sidebar is closed, Gemini logo -->
       <div class="top-nav">
         <div class="nav-left">
-          <div class="menu-btn" @click="toggleSidebar" v-if="!isSidebarOpen">
-            <n-icon :size="20"><MenuOutline /></n-icon>
-          </div>
           <span class="gemini-logo">AI 客服助手</span>
         </div>
       </div>
@@ -946,8 +975,30 @@ onUnmounted(() => {
             </div>
           </div>
         </template>
+
+        <!-- 欢迎语（当没有消息时显示在消息区域中间） -->
+        <div v-if="showWelcome && messages.length === 0" class="greeting-container">
+          <div class="greeting-hi"><span class="gradient-star">✨</span> Hi {{ userName }}</div>
+          <div class="greeting-sub">有什么我可以帮助你的吗</div>
+        </div>
+
+        <!-- 快捷短语（当没有消息时显示） -->
+        <div class="suggestion-pills" v-if="showWelcome && messages.length === 0">
+          <div class="pill" @click="inputValue = '查询最近订单的物流状态'" style="animation-delay: 0.1s">
+            <span>📦</span> 查询订单
+          </div>
+          <div class="pill" @click="inputValue = '有什么热销商品推荐吗'" style="animation-delay: 0.15s">
+            <span>🛍️</span> 推荐商品
+          </div>
+            <div class="pill" @click="inputValue = '我想对刚才的服务做出评价'" style="animation-delay: 0.2s">
+              <span>⭐</span> 服务评价
+            </div>
+            <div class="pill" @click="inputValue = '帮我转接人工客服'" style="animation-delay: 0.25s">
+              <span>🙋</span> 人工客服
+            </div>
+        </div>
       </div>
-      
+
       <!-- Scroll to bottom button -->
       <Transition name="fade">
         <div v-if="showScrollToBottom" class="scroll-bottom-btn" @click="scrollToBottom">
@@ -957,15 +1008,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 输入区域 -->
-    <div class="input-area" :class="{ 'is-new-chat': messages.length === 0 && !isLoading }">
-      <!-- 欢迎/空状态 -->
-      <Transition name="fade-up">
-        <div v-if="messages.length === 0 && !isLoading" class="greeting-container">
-          <div class="greeting-hi"><span class="gradient-star">✨</span> Hi {{ userName }}</div>
-          <div class="greeting-sub">有什么我可以帮助你的吗</div>
-        </div>
-      </Transition>
-
+    <div class="input-area">
       <!-- 待发送附件预览 -->
       <Transition name="slide-up">
         <div v-if="pendingAttachments.length > 0" class="pending-attachments">
@@ -1061,23 +1104,7 @@ onUnmounted(() => {
           </div>
         </n-dropdown>
       </div>
-      
-      <Transition name="fade-up">
-        <div class="suggestion-pills" v-if="messages.length === 0 && !isLoading">
-          <div class="pill" @click="inputValue = '查询最近订单的物流状态'" style="animation-delay: 0.1s">
-            <span>📦</span> 查询订单
-          </div>
-          <div class="pill" @click="inputValue = '有什么热销商品推荐吗'" style="animation-delay: 0.15s">
-            <span>🛍️</span> 推荐商品
-          </div>
-          <div class="pill" @click="inputValue = '我想对刚才的服务做出评价'" style="animation-delay: 0.2s">
-            <span>⭐</span> 服务评价
-          </div>
-          <div class="pill" @click="inputValue = '帮我转接人工客服'" style="animation-delay: 0.25s">
-            <span>🙋</span> 人工客服
-          </div>
-        </div>
-      </Transition>
+
       <div class="disclaimer">客服小鹏可能会产生不准确的信息，请核实重要内容。</div>
     </div>
 
@@ -1279,15 +1306,44 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   padding: 0 16px 16px 16px;
-  overflow-y: auto;
+  overflow: hidden; /* Prevent sidebar itself from scrolling */
+  position: relative;
 }
 
-.sidebar-content::-webkit-scrollbar {
-  width: 6px;
+.sidebar-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: radial-gradient(#1a73e8 0.5px, transparent 0.5px);
+  background-size: 10px 10px;
+  z-index: 0;
 }
-.sidebar-content::-webkit-scrollbar-thumb {
-  background: #c7c7c7;
-  border-radius: 3px;
+
+.sidebar-top-section {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.chat-history-container {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 -8px;
+  padding: 0 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.chat-history-container::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-history-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
 }
 
 /* Sidebar Buttons */
@@ -1402,13 +1458,17 @@ onUnmounted(() => {
 .sidebar-bottom {
   margin-top: auto;
   padding-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  position: relative;
+  z-index: 1;
+  background-color: var(--bg-color); /* Ensure it's opaque over scrolling content if needed */
 }
 
 /* ===== 主聊天区 ===== */
 .chat-container {
-  flex: 1;
   display: flex;
   flex-direction: column;
+  flex: 1;
   background-color: var(--surface-color);
   position: relative;
   overflow: hidden;
@@ -1469,13 +1529,14 @@ onUnmounted(() => {
 
 .chat-area {
   flex: 1;
+  min-height: 0;
   width: 100%;
   overflow-y: auto;
   scroll-behavior: smooth;
 }
 
 .messages-wrapper {
-  padding: 40px 0 140px;
+  padding: 40px 0 60px;
   max-width: 800px;
   margin: 0 auto;
   width: 90%;
@@ -1487,8 +1548,8 @@ onUnmounted(() => {
   max-width: 800px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  margin-bottom: 24px;
+  justify-content: center;
+  margin: 20vh auto 0;
   animation: fadeInUp 0.5s ease;
 }
 
@@ -1522,8 +1583,9 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
-  margin-top: 24px;
-  margin-bottom: 8px;
+  width: 90%;
+  max-width: 800px;
+  margin: 24px auto 8px;
   pointer-events: auto;
 }
 
@@ -1874,26 +1936,14 @@ onUnmounted(() => {
 
 /* ===== 输入区域 ===== */
 .input-area {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   z-index: 100;
-  background: linear-gradient(to bottom, transparent 0%, var(--surface-color) 25%, var(--surface-color) 100%);
-  padding-bottom: 20px;
-  pointer-events: none;
+  background: var(--surface-color);
+  padding-bottom: 24px;
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.input-area.is-new-chat {
-  top: 0;
-  bottom: 0;
-  justify-content: center;
-  background: transparent;
-  padding-bottom: 10vh; /* Adjust vertical centering visually */
 }
 
 .input-container {

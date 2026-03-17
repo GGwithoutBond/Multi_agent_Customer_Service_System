@@ -9,6 +9,7 @@ from src.models.message import Message, MessageRole
 from src.models.user_profile import UserProfile
 from src.models.feedback import Feedback
 from src.models.ticket import Ticket, TicketStatus, TicketPriority
+from src.models.taobao_user_data import TaobaoUserData
 
 __all__ = [
     "Base",
@@ -23,4 +24,5 @@ __all__ = [
     "Ticket",
     "TicketStatus",
     "TicketPriority",
+    "TaobaoUserData",
 ]

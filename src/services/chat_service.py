@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agents.graph.nodes import _orchestrator
 from src.agents.graph.workflow import get_workflow
+from src.core.config import get_settings
 from src.core.exceptions import AgentError
 from src.core.logging import get_logger
 from src.llm import get_llm_client
@@ -26,7 +27,9 @@ from src.repositories.conversation_repo import ConversationRepository
 from src.repositories.message_repo import MessageRepository
 from src.schemas.chat import ChatResponse, ChatStreamChunk
 from src.services.semantic_cache import SemanticCache
-from src.tools.database_tool import MOCK_ORDERS
+from src.database.session import get_session_factory
+from sqlalchemy import select
+from src.models.taobao_user_data import TaobaoUserData
 
 logger = get_logger(__name__)
 
@@ -79,11 +82,12 @@ class ChatService:
                 user_id=str(user_id) if user_id else None,
             )
 
-            # 4. 尝试命中语义缓存 (由于 attachments 相关查询通常非常独特，因此只有无附件时查缓存)
+            # 4. 尝试命中语义缓存
             response_text = None
             intent = "cache_hit"
             worker_type = "cache"
-            if not attachments:
+            settings = get_settings()
+            if not attachments and settings.ENABLE_SEMANTIC_CACHE:
                 cached_res = await self.semantic_cache.get(message)
                 if cached_res:
                     response_text = cached_res
@@ -107,7 +111,7 @@ class ChatService:
                 worker_type = result.get("worker_type")
                 
                 # 写入缓存
-                if not attachments and result.get("quality_score", 5) >= 3:
+                if not attachments and settings.ENABLE_SEMANTIC_CACHE and result.get("quality_score", 5) >= 3:
                      await self.semantic_cache.set(message, response_text)
 
             # 6. 计算指标（优化 6.4: 可观测性）
@@ -211,7 +215,8 @@ class ChatService:
             )
 
             # 尝试命中语义缓存
-            if not attachments:
+            settings = get_settings()
+            if not attachments and settings.ENABLE_SEMANTIC_CACHE:
                 cached_res = await self.semantic_cache.get(message)
                 if cached_res:
                     yield ChatStreamChunk(
@@ -262,6 +267,8 @@ class ChatService:
             detected_worker_type = ""
             detected_sentiment = ""
             detected_urgency = ""
+            
+            ai_action_buttons = []
 
             async for event in workflow.astream(initial_state):
                 for node_name, node_output in event.items():
@@ -315,8 +322,10 @@ class ChatService:
                     await self._emit_return_order_actions(full_response, message)
 
                     # 用 generator 方式发送 action_buttons
-                    action_chunks = self._build_return_order_action_chunks(full_response, message)
+                    action_chunks = await self._build_return_order_action_chunks(full_response, message)
                     for ac in action_chunks:
+                        if ac.type == "action_buttons" and hasattr(ac, "actions"):
+                            ai_action_buttons.extend(ac.actions)
                         yield ac
             
             else:
@@ -342,7 +351,7 @@ class ChatService:
                     yield ChatStreamChunk(type="chunk", content=chunk)
 
             # 写入缓存
-            if not attachments and full_response and not full_response.startswith("抱歉"):
+            if not attachments and settings.ENABLE_SEMANTIC_CACHE and full_response and not full_response.startswith("抱歉"):
                  await self.semantic_cache.set(message, full_response)
 
             # 保存完整回复
@@ -359,6 +368,10 @@ class ChatService:
                 tokens_used=tokens_used,
             )
 
+            ai_msg_metadata = {}
+            if ai_action_buttons:
+                ai_msg_metadata["action_buttons"] = ai_action_buttons
+
             ai_msg = Message(
                 conversation_id=conversation.id,
                 role=MessageRole.ASSISTANT,
@@ -367,6 +380,7 @@ class ChatService:
                 worker_type=detected_worker_type or None,
                 tokens_used=tokens_used,
                 latency_ms=latency_ms,
+                metadata_=ai_msg_metadata if ai_msg_metadata else None,
             )
             ai_msg = await self.msg_repo.create(ai_msg)
 
@@ -525,7 +539,7 @@ class ChatService:
         has_order_list = "ORD-" in response or "订单" in response
         return has_return_intent and has_order_list
 
-    def _build_return_order_action_chunks(self, response: str, user_message: str) -> list:
+    async def _build_return_order_action_chunks(self, response: str, user_message: str) -> list:
         """
         检测退货流程并构建 action_buttons SSE 块
         返回 ChatStreamChunk 列表
@@ -537,19 +551,33 @@ class ChatService:
 
         # 检查回复中是否包含订单列表（用户未选择具体订单）
         order_ids_in_response = re.findall(r'ORD-\d+', response)
+        order_ids_in_response = list(set(order_ids_in_response))  # 去重
+
+        if not order_ids_in_response:
+             return []
+
+        # 获取实际数据库中的订单以回显卡片数据
+        factory = get_session_factory()
+        async with factory() as session:
+             stmt = select(TaobaoUserData).order_by(TaobaoUserData.last_synced_at.desc())
+             result = await session.execute(stmt)
+             taobao_user = result.scalars().first()
+             orders = taobao_user.orders if taobao_user and isinstance(taobao_user.orders, list) else []
+
         if len(order_ids_in_response) > 1:
             # 用户还未选择具体订单 → 提供订单选择卡片
             order_cards = []
             for oid in order_ids_in_response:
-                order_data = MOCK_ORDERS.get(oid)
+                # 寻找匹配的订单数据
+                order_data = next((o for o in orders if str(o.get("order_id", "")).upper() == oid.upper()), None)
                 if order_data:
                     order_cards.append({
                         "type": "order_card",
                         "order_id": oid,
-                        "product": order_data["product"],
-                        "status": order_data["status"],
-                        "amount": order_data["amount"],
-                        "label": f"退货: {order_data['product']}",
+                        "product": order_data.get("product", oid),
+                        "status": order_data.get("status", "未知状态"),
+                        "amount": order_data.get("amount", ""),
+                        "label": f"退货: {order_data.get('product', oid)}",
                         "action": f"我要退货订单 {oid}",
                     })
             if order_cards:
@@ -562,8 +590,8 @@ class ChatService:
         elif len(order_ids_in_response) == 1:
             # 用户已选好或只有一个订单 → 提供确认/取消按钮
             oid = order_ids_in_response[0]
-            order_data = MOCK_ORDERS.get(oid)
-            product_name = order_data["product"] if order_data else oid
+            order_data = next((o for o in orders if str(o.get("order_id", "")).upper() == oid.upper()), None)
+            product_name = order_data.get("product", oid) if order_data else oid
 
             confirm_actions = [
                 {

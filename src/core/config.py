@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 4096
 
+    # ── MCP 配置 ──
+    MCP_ENABLED: bool = Field(default=False, description="是否启用 MCP 增强模式（需要 MCP 服务器运行）")
+
     # ── 记忆配置 ──
     MEMORY_MAX_TOKENS: int = 4000
     MEMORY_MAX_TURNS: int = 10
@@ -125,6 +128,8 @@ class Settings(BaseSettings):
     # ── Tavily 搜索 API ──
     TAVILY_API_KEY: Optional[str] = None
 
+    # ── 缓存配置 ──
+    ENABLE_SEMANTIC_CACHE: bool = Field(default=False, description="是否开启对话语义缓存")
 
 @lru_cache()
 def get_settings() -> Settings:

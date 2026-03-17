@@ -14,10 +14,24 @@ from src.models.base import Base, UUIDMixin, TimestampMixin
 
 
 class ConversationStatus(str, enum.Enum):
-    """会话状态枚举"""
+    """会话状态枚举
+
+    完整状态机:
+    - INIT: 初始化，用户刚进入但还未发送消息
+    - ACTIVE: 活跃中，AI 正在处理
+    - WAITING: 等待中，等待用户回复（如多轮澄清）
+    - TRANSFERRING: 转接中，正在转接到人工
+    - TRANSFERRED: 已转接，已转接到人工坐席
+    - CLOSED: 已关闭，会话正常结束
+    - TIMEOUT: 超时，用户长时间无活动
+    """
+    INIT = "init"
     ACTIVE = "active"
-    CLOSED = "closed"
+    WAITING = "waiting"
+    TRANSFERRING = "transferring"
     TRANSFERRED = "transferred"
+    CLOSED = "closed"
+    TIMEOUT = "timeout"
 
 
 class ConversationChannel(str, enum.Enum):

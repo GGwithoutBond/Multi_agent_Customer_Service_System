@@ -9,7 +9,7 @@ from typing import Any
 from langgraph.prebuilt import create_react_agent
 
 from src.agents.workers.base_worker import BaseWorker
-from src.agents.tools.database_tool import create_ticket
+from src.agents.tools.database_tool import create_ticket, query_ticket, escalate_ticket
 from src.core.logging import get_logger
 from src.llm import get_llm_client
 from src.llm.prompt_templates import COMPLAINT_WORKER_PROMPT
@@ -25,7 +25,7 @@ class ComplaintWorker(BaseWorker):
             name="complaint_worker",
             description="处理用户投诉、自动创建工单，支持情感感知和自动升级",
         )
-        self.tools = [create_ticket]
+        self.tools = [create_ticket, query_ticket, escalate_ticket]
 
     async def handle(self, user_input: str, context: dict[str, Any], history: str = "") -> str:
         """使用 React Agent + create_ticket 工具处理投诉"""
@@ -50,7 +50,7 @@ class ComplaintWorker(BaseWorker):
                 _prompt_str += (
                     f"\n\n⚠️ 特别注意：用户情绪较为激动（情感: {sentiment}，紧急度: {urgency}）。"
                     "请先真诚安抚情绪，再提供解决方案，语气要格外温和。"
-                    "主动提出创建投诉工单（调用 create_ticket 工具），让用户感受到问题被认真对待。"
+                    "主动提出创建投诉工单（调用 create_ticket 工具）或加急已有工单（调用 escalate_ticket 工具），让用户感受到问题被认真对待。"
                 )
 
             # 注入系统上下文供工具使用（通过 system 消息提示 Agent）

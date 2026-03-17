@@ -180,17 +180,17 @@ async def search_products(keyword: str, max_results: int = 5) -> str:
 ALL_TOOLS = [query_order, query_user_orders, query_product, search_products]
 
 
-# ── 模拟工单存储（内存）──
-_MOCK_TICKETS: dict[str, dict] = {}
+# ── 真实工单服务接入 ──
+from src.services.ticket_service import TicketService
+from src.database.session import get_session_factory
 
-# 紧急度 → 优先级映射
+# 紧急度 → 优先级映射 (仍保留在这里做简单参考或去掉，因为TicketService里已经有了)
 _URGENCY_TO_PRIORITY = {
     "low": "low",
     "medium": "medium",
     "high": "high",
     "critical": "critical",
 }
-
 
 @tool
 async def create_ticket(
@@ -215,60 +215,106 @@ async def create_ticket(
     Returns:
         包含工单号和预计处理时间的提示信息
     """
-    import uuid
-    from datetime import datetime, timezone
+    factory = get_session_factory()
+    async with factory() as db:
+        try:
+            ticket = await TicketService.create_ticket(
+                db=db,
+                description=description,
+                issue_type=issue_type,
+                conversation_id=conversation_id,
+                user_id=user_id,
+                urgency=urgency,
+                sentiment=sentiment
+            )
+            ticket_id = str(ticket.id)
+            priority = ticket.priority.value
+            
+            # 根据优先级给出不同的预计处理时间
+            if priority == "critical":
+                eta = "2 小时内"
+            elif priority == "high":
+                eta = "4 小时内"
+            elif priority == "medium":
+                eta = "1 个工作日内"
+            else:
+                eta = "3 个工作日内"
 
-    ticket_id = f"TKT-{uuid.uuid4().hex[:8].upper()}"
-    priority = _URGENCY_TO_PRIORITY.get(urgency, "medium")
-
-    ticket = {
-        "ticket_id": ticket_id,
-        "description": description,
-        "issue_type": issue_type,
-        "conversation_id": conversation_id,
-        "user_id": user_id,
-        "urgency": urgency,
-        "sentiment": sentiment,
-        "priority": priority,
-        "status": "open",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _MOCK_TICKETS[ticket_id] = ticket
-
-    logger.info(
-        "📋 投诉工单已创建 | ticket_id=%s priority=%s sentiment=%s | %s",
-        ticket_id, priority, sentiment, description[:80],
-    )
-
-    # TODO: 替换为真实数据库写入
-    # async with get_db_session() as session:
-    #     db_ticket = Ticket(
-    #         description=description, issue_type=issue_type,
-    #         conversation_id=conversation_id, user_id=user_id,
-    #         priority=TicketPriority(priority), sentiment=sentiment,
-    #     )
-    #     session.add(db_ticket)
-    #     await session.commit()
-
-    # 根据优先级给出不同的预计处理时间
-    if priority == "critical":
-        eta = "2 小时内"
-    elif priority == "high":
-        eta = "4 小时内"
-    elif priority == "medium":
-        eta = "1 个工作日内"
-    else:
-        eta = "3 个工作日内"
-
-    return (
-        f"✅ 投诉工单已成功创建\n"
-        f"工单号：**{ticket_id}**\n"
-        f"投诉类型：{issue_type}\n"
-        f"优先级：{priority}\n"
-        f"预计处理时间：{eta}\n\n"
-        f"您可以凭工单号 {ticket_id} 随时查询处理进度。\n"
-        f"我们会尽快为您跟进，感谢您的耐心。"
-    )
+            return (
+                f"✅ 投诉工单已成功创建\n"
+                f"工单号：**{ticket_id}**\n"
+                f"投诉类型：{issue_type}\n"
+                f"优先级：{priority}\n"
+                f"状态：{ticket.status.value}\n"
+                f"预计处理时间：{eta}\n\n"
+                f"您可以凭工单号随时查询处理进度。\n"
+                f"我们会尽快为您跟进，感谢您的耐心。"
+            )
+        except Exception as e:
+            logger.error(f"创建工单失败: {e}", exc_info=True)
+            return f"创建工单失败，请稍后重试。（错误：{str(e)[:60]}）"
 
 
-COMPLAINT_TOOLS = [create_ticket]
+@tool
+async def query_ticket(ticket_id: str) -> str:
+    """
+    查询指定工单的处理进度和详情。
+
+    Args:
+        ticket_id: 工单编号(UUID)
+
+    Returns:
+        工单状态和详情信息
+    """
+    factory = get_session_factory()
+    async with factory() as db:
+        try:
+            ticket = await TicketService.get_ticket(db, ticket_id)
+            if not ticket:
+                return f"未找到工单 {ticket_id}。请确认工单号是否正确。"
+                
+            return (
+                f"工单号: {ticket.id}\n"
+                f"标题: {ticket.title}\n"
+                f"类型: {ticket.issue_type}\n"
+                f"优先级: {ticket.priority.value}\n"
+                f"当前状态: {ticket.status.value}\n"
+                f"创建时间: {ticket.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"处理备注: {ticket.notes or '暂无'}"
+            )
+        except Exception as e:
+            logger.error(f"查询工单失败: {e}", exc_info=True)
+            return "查询工单失败，请确认工单号格式是否正确或稍后重试。"
+
+
+@tool
+async def escalate_ticket(ticket_id: str, reason: str = "") -> str:
+    """
+    催办或升级工单（当用户非常着急、情绪激动，或者处理超时时调用）。
+
+    Args:
+        ticket_id: 工单编号(UUID)
+        reason: 升级或催办的原因备注
+
+    Returns:
+        处理结果提示
+    """
+    factory = get_session_factory()
+    async with factory() as db:
+        try:
+            ticket = await TicketService.escalate_ticket(db, ticket_id, reason)
+            if not ticket:
+                return f"未找到工单 {ticket_id}，无法进行催办。"
+                
+            return (
+                f"✅ 工单 {ticket_id} 已成功催办/升级！\n"
+                f"当前优先级: {ticket.priority.value}\n"
+                f"当前状态: {ticket.status.value}\n"
+                f"已记录催办原因重点跟进，人工客服将尽快优先处理您的诉求。"
+            )
+        except Exception as e:
+            logger.error(f"催办工单失败: {e}", exc_info=True)
+            return "催办工单失败，请稍后重试。"
+
+
+COMPLAINT_TOOLS = [create_ticket, query_ticket, escalate_ticket]
