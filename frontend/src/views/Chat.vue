@@ -108,8 +108,34 @@ const STATUS_REGEX = /(delivered|shipped|processing|pending|cancelled|refunding|
 const DATE_REGEX = /(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{1,2})?)/g
 const ORDER_REGEX = /\bORD-\d+\b/gi
 const AMOUNT_REGEX = /(?:\u00a5|\uffe5|\$)\s?\d+(?:\.\d{1,2})?/g
+const STATUS_PATTERN = '(?:delivered|shipped|processing|pending|cancelled|refunding|completed|signed|\u5df2\u7b7e\u6536|\u5df2\u53d1\u8d27|\u5904\u7406\u4e2d|\u5f85\u4ed8\u6b3e|\u9000\u6b3e\u4e2d|\u5df2\u5b8c\u6210)'
+const ORDER_STATUS_PAIR_REGEX = new RegExp(
+  `(ORD-\\d+)[\\s\\S]{0,80}?(?:\\||\uff0c|,|;|\\s)*(?:status|\\u72b6\\u6001)\\s*[:\uff1a]?\\s*[*_\\s]*(${STATUS_PATTERN})`,
+  'gi',
+)
 
 const dedupe = (values: string[]) => [...new Set(values.filter(Boolean))]
+
+const extractOrderStatusPairs = (content: string): StructuredMetric[] => {
+  const pairs: StructuredMetric[] = []
+  const seen = new Set<string>()
+  let match: RegExpExecArray | null
+
+  while ((match = ORDER_STATUS_PAIR_REGEX.exec(content)) !== null) {
+    const orderId = (match[1] || '').toUpperCase().trim()
+    const status = (match[2] || '').trim()
+    if (!orderId || !status) continue
+    const key = `${orderId}::${status}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    pairs.push({
+      label: orderId,
+      value: status,
+    })
+  }
+
+  return pairs
+}
 
 const parseStructuredBlocks = (content: string): StructuredBlock[] => {
   const normalized = (content || '').replace(/\r\n/g, '\n').trim()
@@ -178,9 +204,14 @@ const parseStructuredBlocks = (content: string): StructuredBlock[] => {
   flushCurrent()
 
   const metrics: StructuredMetric[] = []
-  dedupe(normalized.match(ORDER_REGEX) || []).forEach(v => metrics.push({ label: '\u8ba2\u5355\u53f7', value: v }))
+  const pairedOrderStatus = extractOrderStatusPairs(normalized)
+  if (pairedOrderStatus.length > 0) {
+    metrics.push(...pairedOrderStatus)
+  } else {
+    dedupe(normalized.match(ORDER_REGEX) || []).forEach(v => metrics.push({ label: '\u8ba2\u5355\u53f7', value: v }))
+    dedupe(normalized.match(STATUS_REGEX) || []).forEach(v => metrics.push({ label: '\u72b6\u6001', value: v }))
+  }
   dedupe(normalized.match(AMOUNT_REGEX) || []).forEach(v => metrics.push({ label: '\u91d1\u989d', value: v }))
-  dedupe(normalized.match(STATUS_REGEX) || []).forEach(v => metrics.push({ label: '\u72b6\u6001', value: v }))
   dedupe(normalized.match(DATE_REGEX) || []).forEach(v => metrics.push({ label: '\u65f6\u95f4', value: v }))
 
   if (metrics.length) {
