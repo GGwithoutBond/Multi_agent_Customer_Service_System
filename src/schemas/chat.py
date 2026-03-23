@@ -1,41 +1,42 @@
-"""
-聊天相关 Schema
+﻿"""
+Chat-related schemas.
 """
 
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 
 class Attachment(BaseModel):
-    """附件 (图片/文件/订单/商品)"""
+    """Attachment payload for chat requests."""
+
     type: str = Field(..., description="attachment type: image / file / order / product")
-    url: Optional[str] = Field(None, description="文件 URL (image/file)")
-    name: Optional[str] = Field(None, description="文件名或名称")
-    size: Optional[int] = Field(None, description="文件大小 (bytes)")
-    # 订单相关
-    order_id: Optional[str] = Field(None, description="订单 ID")
-    status: Optional[str] = Field(None, description="订单状态")
-    # 商品相关
-    product_id: Optional[str] = Field(None, description="商品 ID")
-    price: Optional[float] = Field(None, description="商品价格")
-    image: Optional[str] = Field(None, description="商品图片")
+    url: Optional[str] = Field(None, description="file URL (image/file)")
+    name: Optional[str] = Field(None, description="file or entity name")
+    size: Optional[int] = Field(None, description="file size in bytes")
+    order_id: Optional[str] = Field(None, description="order ID")
+    status: Optional[str] = Field(None, description="order status")
+    product_id: Optional[str] = Field(None, description="product ID")
+    price: Optional[float] = Field(None, description="product price")
+    image: Optional[str] = Field(None, description="product image")
 
 
 class ChatRequest(BaseModel):
-    """聊天请求"""
-    conversation_id: Optional[UUID] = Field(None, description="会话 ID，为空则自动创建")
-    message: str = Field(..., min_length=1, max_length=4096, description="用户消息")
-    attachments: Optional[List[Attachment]] = Field(None, description="附件列表 (图片/文件/订单/商品)")
-    context: Optional[dict] = Field(None, description="附加上下文信息")
-    persona_style: Optional[str] = Field(None, description="客服风格 (professional / friendly / technical)")
-    stream: bool = Field(default=False, description="是否使用流式响应")
-    web_search: bool = Field(default=False, description="是否启用联网搜索")
+    """Chat request."""
+
+    conversation_id: Optional[UUID] = Field(None, description="conversation ID; auto-created when omitted")
+    message: str = Field(..., min_length=1, max_length=4096, description="user message")
+    attachments: Optional[List[Attachment]] = Field(None, description="attachment list")
+    context: Optional[dict] = Field(None, description="extra context")
+    persona_style: Optional[str] = Field(None, description="persona style: professional / friendly / technical")
+    stream: bool = Field(default=False, description="use streaming response")
+    web_search: bool = Field(default=False, description="enable web search")
 
 
 class ChatResponse(BaseModel):
-    """聊天响应"""
+    """Chat response."""
+
     conversation_id: UUID
     message_id: UUID
     content: str
@@ -46,17 +47,24 @@ class ChatResponse(BaseModel):
 
 
 class ChatStreamChunk(BaseModel):
-    """流式聊天块"""
-    type: str = Field(description="chunk / thinking / tool_call / done / error / action_buttons")
+    """Streaming chat chunk."""
+
+    type: str = Field(description="meta / chunk / thinking / tool_call / done / error / action_buttons")
     content: Optional[str] = None
     message_id: Optional[UUID] = None
+    conversation_id: Optional[UUID] = None
     error: Optional[str] = None
-    step: Optional[str] = Field(None, description="过程步骤描述 (thinking/tool_call 类型使用)")
-    actions: Optional[List[dict]] = Field(None, description="交互按钮列表 (action_buttons 类型使用)")
+    step: Optional[str] = Field(None, description="thinking/tool_call step description")
+    actions: Optional[List[dict]] = Field(None, description="interactive actions for action_buttons type")
+    metrics: Optional[dict[str, float | int | None]] = Field(
+        None,
+        description="stream metrics such as route_ms / worker_ms / ttfc_ms",
+    )
 
 
 class WebSocketMessage(BaseModel):
-    """WebSocket 消息"""
+    """WebSocket payload."""
+
     type: str = Field(description="message / ping / close")
     content: Optional[str] = None
     conversation_id: Optional[UUID] = None

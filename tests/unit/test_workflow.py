@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 from src.agents.graph.workflow import build_workflow, compile_workflow, get_workflow
 from src.agents.orchestrator.state import AgentState
+from src.agents.graph.nodes import quality_review_node
 
 
 class TestWorkflowBuilding:
@@ -43,7 +44,7 @@ class TestWorkflowExecution:
     """工作流执行测试"""
 
     @pytest.mark.asyncio
-    @patch("src.agents.graph.nodes.get_llm_client")
+    @patch("src.agents.orchestrator.router.get_llm_client")
     async def test_workflow_runs_faq_path(self, mock_get_llm):
         """测试工作流执行 FAQ 路径"""
         # Mock LLM
@@ -69,7 +70,7 @@ class TestWorkflowExecution:
             assert result is not None
 
     @pytest.mark.asyncio
-    @patch("src.agents.graph.nodes.get_llm_client")
+    @patch("src.agents.orchestrator.router.get_llm_client")
     async def test_workflow_routes_to_correct_worker(self, mock_get_llm):
         """测试工作流路由到正确的 Worker"""
         mock_client = AsyncMock()
@@ -116,6 +117,7 @@ class TestAgentState:
             "retry_count": 0,
             "quality_score": None,
             "quality_reason": None,
+            "quality_risk_flags": None,
         }
 
         assert state["user_input"] == "测试"
@@ -145,7 +147,32 @@ class TestAgentState:
             "retry_count": 0,
             "quality_score": None,
             "quality_reason": None,
+            "quality_risk_flags": None,
         }
 
         assert state["user_id"] is None
         assert state["sentiment"] is None
+
+
+class TestQualityReviewNode:
+    """质量审查节点测试"""
+
+    @pytest.mark.asyncio
+    @patch("src.agents.graph.nodes._quality_agent.process", new_callable=AsyncMock)
+    async def test_quality_review_node_uses_quality_agent(self, mock_quality_process):
+        mock_quality_process.return_value = {
+            "quality_score": 4,
+            "quality_reason": "回答基本完整",
+            "quality_risk_flags": [],
+        }
+
+        result = await quality_review_node(
+            {
+                "user_input": "退货要多久",
+                "worker_result": "一般 1-3 个工作日",
+                "retry_count": 0,
+            }
+        )
+
+        assert result["quality_score"] == 4
+        mock_quality_process.assert_awaited_once()

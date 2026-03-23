@@ -19,3 +19,17 @@ export function uploadFile(file: File) {
     }
   })
 }
+
+export function getAvailableOrders() {
+  return request({
+    url: '/chat/orders/options',
+    method: 'get'
+  })
+}
+
+export function getAvailableProducts() {
+  return request({
+    url: '/chat/products/options',
+    method: 'get'
+  })
+}

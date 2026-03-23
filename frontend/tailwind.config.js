@@ -6,7 +6,7 @@ export default {
     darkMode: ["class"],
     content: [
         './index.html',
-        './src/**/*.{ts,tsx}',
+        './src/**/*.{vue,js,ts,jsx,tsx}',
     ],
     theme: {
         container: {

@@ -72,6 +72,7 @@ def sample_agent_state():
         "retry_count": 0,
         "quality_score": None,
         "quality_reason": None,
+        "quality_risk_flags": None,
     }
 
 

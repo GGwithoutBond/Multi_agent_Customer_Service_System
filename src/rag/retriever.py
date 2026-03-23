@@ -4,12 +4,22 @@
 优化: 集成 Reranker 精排、动态图检索分数
 """
 
+import time
+from collections import deque
 from typing import Any, Optional
 
 from src.core.logging import get_logger
 from src.rag.embeddings import embed_text
 
 logger = get_logger(__name__)
+
+# ── 检索指标记录（内存环形缓冲区，最近 200 条） ──
+_retrieval_logs: deque[dict[str, Any]] = deque(maxlen=200)
+
+
+def get_retrieval_logs() -> list[dict[str, Any]]:
+    """获取最近的检索指标日志，供 Admin API 调用"""
+    return list(_retrieval_logs)
 
 
 class HybridRetriever:
@@ -41,7 +51,7 @@ class HybridRetriever:
                 from src.rag.reranker import Reranker
                 self._reranker = Reranker()
             except Exception as e:
-                logger.warning("Reranker 初始化失败: %s，跳过精排", e)
+                logger.warning("重排器初始化失败: %s，跳过精排", e)
         return self._reranker
 
     async def retrieve(
@@ -65,16 +75,21 @@ class HybridRetriever:
         Returns:
             检索结果列表, 每项包含 content, score, source 等字段
         """
+        t0 = time.time()
         results: list[dict[str, Any]] = []
+        vector_count = 0
+        graph_count = 0
 
         # 1. 向量检索
         if use_vector:
             vector_results = await self._vector_search(query, top_k)
+            vector_count = len(vector_results)
             results.extend(vector_results)
 
         # 2. 图检索
         if use_graph:
             graph_results = await self._graph_search(query, top_k)
+            graph_count = len(graph_results)
             results.extend(graph_results)
 
         # 3. RRF 融合排序 (如果多路召回)
@@ -82,10 +97,36 @@ class HybridRetriever:
             results = self._rrf_fusion(results, top_k * 2)  # 多取一些给 reranker
 
         # 4. Reranker 精排（优化 4.3）
+        reranker_used = False
         if use_reranker and results:
             results = await self._rerank(query, results, top_k)
+            reranker_used = True
 
-        return results[:top_k]
+        final_results = results[:top_k]
+
+        # ── 记录检索指标 ──
+        latency_ms = int((time.time() - t0) * 1000)
+        scores = [r.get("rerank_score") or r.get("rrf_score") or r.get("score", 0) for r in final_results]
+        avg_score = round(sum(scores) / len(scores), 4) if scores else 0
+        top_score = round(max(scores), 4) if scores else 0
+
+        log_entry = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "query": query[:120],
+            "top_k": top_k,
+            "vector_hits": vector_count,
+            "graph_hits": graph_count,
+            "total_results": len(final_results),
+            "reranker_used": reranker_used,
+            "avg_score": avg_score,
+            "top_score": top_score,
+            "latency_ms": latency_ms,
+            "sources": [r.get("source", "unknown") for r in final_results],
+            "top_contents": [r.get("content", "")[:80] for r in final_results[:3]],
+        }
+        _retrieval_logs.appendleft(log_entry)
+
+        return final_results
 
     async def _vector_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
         """向量相似度检索"""
@@ -164,7 +205,7 @@ class HybridRetriever:
 
             return reranked_results
         except Exception as e:
-            logger.warning("Reranker 精排失败: %s，使用 RRF 排序", e)
+            logger.warning("重排器精排失败: %s，使用 RRF 排序", e)
             return results[:top_k]
 
     def _rrf_fusion(

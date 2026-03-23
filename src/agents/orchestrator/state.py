@@ -73,3 +73,4 @@ class AgentState(TypedDict):
     retry_count: int  # 重试次数 (防止死循环, 最多 1 次)
     quality_score: Optional[int]  # 质量打分 1-5
     quality_reason: Optional[str]  # 质量审查失败原因（用于重试时注入改进提示）
+    quality_risk_flags: Optional[list[str]]  # 质量风险标签（用于监控与追踪）

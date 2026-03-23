@@ -39,8 +39,8 @@ import {
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import MarkdownIt from 'markdown-it'
-import { getMessages, uploadFile } from '@/api/chat'
-import { createConversation, updateConversation, getConversations, deleteConversation } from '@/api/conversation'
+import { getMessages, uploadFile, getAvailableOrders, getAvailableProducts } from '@/api/chat'
+import { updateConversation, getConversations, deleteConversation } from '@/api/conversation'
 import { useUserStore } from '@/stores/user'
 
 const emit = defineEmits<{
@@ -57,44 +57,162 @@ function renderIcon(icon: any) {
 }
 
 // Markdown 渲染
+
+// Markdown rendering
 const md = new MarkdownIt({
   html: false,
   breaks: true,
   linkify: true,
   highlight: function (str: string, lang: string) {
-    const langstr = lang ? `<span class="code-lang">${lang}</span>` : '';
-    let codeStr = '';
+    const langstr = lang ? `<span class="code-lang">${lang}</span>` : ''
+    let codeStr = ''
     if (lang && hljs.getLanguage(lang)) {
       try {
-        codeStr = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value;
+        codeStr = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value
       } catch (__) {
-        codeStr = md.utils.escapeHtml(str);
+        codeStr = md.utils.escapeHtml(str)
       }
     } else {
-      codeStr = md.utils.escapeHtml(str);
+      codeStr = md.utils.escapeHtml(str)
     }
-    
-    const encodedStr = encodeURIComponent(str);
-    
+
+    const encodedStr = encodeURIComponent(str)
+
     return `<div class="code-block-wrapper">
       <div class="code-block-header">
         ${langstr}
-        <button class="copy-code-btn" onclick="navigator.clipboard.writeText(decodeURIComponent('${encodedStr}')); this.innerText='Copied!'; setTimeout(() => this.innerText='Copy', 2000)">Copy</button>
+        <button class="copy-code-btn" onclick="navigator.clipboard.writeText(decodeURIComponent('${encodedStr}')); this.innerText='已复制'; setTimeout(() => this.innerText='复制', 2000)">复制</button>
       </div>
       <pre class="hljs"><code>${codeStr}</code></pre>
-    </div>`;
-  }
+    </div>`
+  },
 })
 
-const renderMarkdown = (content: string) => {
-  return md.render(content || '')
+const renderMarkdown = (content: string) => md.render(content || '')
+
+type StructuredKind = 'conclusion' | 'steps' | 'tips' | 'data'
+
+interface StructuredMetric {
+  label: string
+  value: string
+}
+
+interface StructuredBlock {
+  kind: StructuredKind
+  title: string
+  items: string[]
+  metrics?: StructuredMetric[]
+}
+
+const STATUS_REGEX = /(delivered|shipped|processing|pending|cancelled|refunding|completed|signed|\u5df2\u7b7e\u6536|\u5df2\u53d1\u8d27|\u5904\u7406\u4e2d|\u5f85\u4ed8\u6b3e|\u9000\u6b3e\u4e2d|\u5df2\u5b8c\u6210)/gi
+const DATE_REGEX = /(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{1,2})?)/g
+const ORDER_REGEX = /\bORD-\d+\b/gi
+const AMOUNT_REGEX = /(?:\u00a5|\uffe5|\$)\s?\d+(?:\.\d{1,2})?/g
+
+const dedupe = (values: string[]) => [...new Set(values.filter(Boolean))]
+
+const parseStructuredBlocks = (content: string): StructuredBlock[] => {
+  const normalized = (content || '').replace(/\r\n/g, '\n').trim()
+  if (!normalized) return []
+
+  const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean)
+  if (!lines.length) return []
+
+  const sectionMap: Record<StructuredKind, RegExp> = {
+    conclusion: /(conclusion|summary|answer|result|\u7ed3\u8bba|\u603b\u7ed3|\u7b54\u6848|\u5904\u7406\u7ed3\u679c)/i,
+    steps: /(steps|workflow|process|how to|\u64cd\u4f5c\u6b65\u9aa4|\u6d41\u7a0b|\u6b65\u9aa4)/i,
+    tips: /(tips|note|warning|risk|\u63d0\u793a|\u6ce8\u610f|\u98ce\u9669|\u5efa\u8bae)/i,
+    data: /(data|key info|details|metrics|\u5173\u952e\u4fe1\u606f|\u6570\u636e|\u660e\u7ec6|\u53c2\u6570)/i,
+  }
+
+  const titleMap: Record<StructuredKind, string> = {
+    conclusion: '\u7ed3\u8bba',
+    steps: '\u6b65\u9aa4',
+    tips: '\u6ce8\u610f\u9879',
+    data: '\u5173\u952e\u6570\u636e',
+  }
+
+  const blocks: StructuredBlock[] = []
+  let currentKind: StructuredKind | null = null
+  let currentItems: string[] = []
+  let hasStructuredSignal = false
+
+  const flushCurrent = () => {
+    if (!currentKind || !currentItems.length) return
+    blocks.push({
+      kind: currentKind,
+      title: titleMap[currentKind],
+      items: dedupe(currentItems),
+    })
+    currentItems = []
+  }
+
+  for (const line of lines) {
+    const headingCandidate = line.replace(/^#+\s*/, '').replace(/[:\uff1a]$/, '')
+    const matchedSection = (Object.keys(sectionMap) as StructuredKind[]).find(k => sectionMap[k].test(headingCandidate))
+    if (matchedSection) {
+      flushCurrent()
+      currentKind = matchedSection
+      hasStructuredSignal = true
+      continue
+    }
+
+    const isBullet = /^[-*•]\s+/.test(line)
+    const isNumbered = /^\d+[.)]\s+/.test(line)
+    const item = isBullet
+      ? line.replace(/^[-*•]\s+/, '')
+      : isNumbered
+        ? line.replace(/^\d+[.)]\s+/, '')
+        : line
+
+    if (isBullet || isNumbered) {
+      if (!currentKind) currentKind = 'steps'
+      hasStructuredSignal = true
+      currentItems.push(item)
+      continue
+    }
+
+    if (!currentKind) currentKind = 'conclusion'
+    currentItems.push(item)
+  }
+  flushCurrent()
+
+  const metrics: StructuredMetric[] = []
+  dedupe(normalized.match(ORDER_REGEX) || []).forEach(v => metrics.push({ label: '\u8ba2\u5355\u53f7', value: v }))
+  dedupe(normalized.match(AMOUNT_REGEX) || []).forEach(v => metrics.push({ label: '\u91d1\u989d', value: v }))
+  dedupe(normalized.match(STATUS_REGEX) || []).forEach(v => metrics.push({ label: '\u72b6\u6001', value: v }))
+  dedupe(normalized.match(DATE_REGEX) || []).forEach(v => metrics.push({ label: '\u65f6\u95f4', value: v }))
+
+  if (metrics.length) {
+    blocks.push({
+      kind: 'data',
+      title: '\u5173\u952e\u6570\u636e',
+      items: [],
+      metrics: dedupe(metrics.map(m => `${m.label}:${m.value}`)).map(item => {
+        const [label, ...rest] = item.split(':')
+        return { label, value: rest.join(':') }
+      }),
+    })
+    hasStructuredSignal = true
+  }
+
+  return hasStructuredSignal ? blocks : []
+}
+
+const finalizeAssistantMessage = (msg: any) => {
+  if (!msg || msg.role !== 'assistant') return
+  const text = (msg.content || '').trim()
+  if (!text) return
+  const blocks = parseStructuredBlocks(text)
+  msg.structuredBlocks = blocks
+  msg.renderedHtml = blocks.length ? '' : renderMarkdown(text)
 }
 
 const conversationId = ref<string>('')
 const messages = ref<any[]>([])
 const inputValue = ref('')
 const isLoading = ref(false)
-// 用于控制是否显示欢迎语，初始为 false，只有在确认是新会话后才显示
+// 控制是否显示欢迎语：默认 false，仅确认是新会话后才显示
 const showWelcome = ref(false)
 const scrollContainerRef = ref<HTMLElement>()
 const innerRef = ref()
@@ -127,21 +245,20 @@ const handleSelectChat = (id: string) => {
   router.push(`/chat/${id}`)
 }
 
-// ===== 历史会话操作 (More Options) =====
+// ===== 历史会话操作（更多选项） =====
 const showRenameModal = ref(false)
 const renameId = ref('')
 const renameTitle = ref('')
 
 const chatOptions = [
-  { label: 'Share conversation', key: 'share', icon: renderIcon(ShareOutline) },
-  { label: 'Pin', key: 'pin', icon: renderIcon(PinOutline) },
-  { label: 'Rename', key: 'rename', icon: renderIcon(PencilOutline) },
-  { label: 'Delete', key: 'delete', icon: renderIcon(TrashOutline) }
+  { label: '分享会话', key: 'share', icon: renderIcon(ShareOutline) },
+  { label: '置顶', key: 'pin', icon: renderIcon(PinOutline) },
+  { label: '重命名', key: 'rename', icon: renderIcon(PencilOutline) },
+  { label: '删除', key: 'delete', icon: renderIcon(TrashOutline) }
 ]
 
 const handleChatOption = async (key: string, id: string) => {
   if (key === 'share' || key === 'pin') {
-    // No-op for now
     message.info(`功能开发中: ${key}`)
   } else if (key === 'rename') {
     const chat = conversations.value.find(c => c.id === id)
@@ -200,29 +317,32 @@ interface AttachmentItem {
   image?: string
 }
 
+interface OrderOption {
+  order_id: string
+  name: string
+  status: string
+  price: number
+  date?: string
+}
+
+interface ProductOption {
+  product_id: string
+  name: string
+  price: number
+  category?: string
+  image?: string
+}
+
 const pendingAttachments = ref<AttachmentItem[]>([])
 const imageInputRef = ref<HTMLInputElement>()
 const fileInputRef = ref<HTMLInputElement>()
 const uploading = ref(false)
 const showOrderDrawer = ref(false)
 const showProductDrawer = ref(false)
-
-// 模拟订单数据
-const mockOrders = ref([
-  { order_id: 'ORD-2024001', name: 'iPhone 16 Pro', status: '已发货', price: 8999, date: '2024-12-01' },
-  { order_id: 'ORD-2024002', name: 'AirPods Pro 2', status: '已签收', price: 1899, date: '2024-11-28' },
-  { order_id: 'ORD-2024003', name: 'MacBook Air M3', status: '处理中', price: 9499, date: '2024-12-05' },
-  { order_id: 'ORD-2024004', name: 'iPad Pro 13"', status: '待付款', price: 10999, date: '2024-12-08' },
-])
-
-// 模拟商品数据
-const mockProducts = ref([
-  { product_id: 'P001', name: 'MacBook Pro 14"', price: 12999, image: '', category: '电脑' },
-  { product_id: 'P002', name: 'iPhone 16 Pro Max', price: 9999, image: '', category: '手机' },
-  { product_id: 'P003', name: 'Apple Watch Ultra 2', price: 5999, image: '', category: '手表' },
-  { product_id: 'P004', name: 'Vision Pro', price: 29999, image: '', category: 'AR设备' },
-  { product_id: 'P005', name: 'AirPods Max', price: 4399, image: '', category: '耳机' },
-])
+const orderOptions = ref<OrderOption[]>([])
+const productOptions = ref<ProductOption[]>([])
+const loadingOrderOptions = ref(false)
+const loadingProductOptions = ref(false)
 
 // Plus 按钮下拉菜单选项
 const plusOptions = [
@@ -243,27 +363,26 @@ const plusOptions = [
   }
 ]
 
-// ===== 侧边栏底部设置 =====
 const settingsOptions = [
-  { label: 'Activity', key: 'activity', icon: renderIcon(TimeOutline) },
-  { label: 'Instructions for Gemini', key: 'instructions', icon: renderIcon(PersonOutline) },
-  { label: 'Connected Apps', key: 'apps', icon: renderIcon(AppsOutline) },
+  { label: '活动记录', key: 'activity', icon: renderIcon(TimeOutline) },
+  { label: '对话指令设置', key: 'instructions', icon: renderIcon(PersonOutline) },
+  { label: '已连接应用', key: 'apps', icon: renderIcon(AppsOutline) },
   { type: 'divider', key: 'd1' },
-  { label: 'Your public links', key: 'links', icon: renderIcon(LinkOutline) },
+  { label: '公开链接', key: 'links', icon: renderIcon(LinkOutline) },
   { type: 'divider', key: 'd2' },
-  { label: 'Theme', key: 'theme', icon: renderIcon(SunnyOutline) },
+  { label: '主题', key: 'theme', icon: renderIcon(SunnyOutline) },
   { type: 'divider', key: 'd3' },
-  { label: 'View subscriptions', key: 'subscriptions', icon: renderIcon(CardOutline) },
+  { label: '订阅管理', key: 'subscriptions', icon: renderIcon(CardOutline) },
   { type: 'divider', key: 'd4' },
-  { label: 'NotebookLM', key: 'notebook', icon: renderIcon(BookOutline) },
+  { label: '笔记本', key: 'notebook', icon: renderIcon(BookOutline) },
   { type: 'divider', key: 'd5' },
-  { label: 'Send feedback', key: 'feedback', icon: renderIcon(ChatboxEllipsesOutline) },
+  { label: '提交反馈', key: 'feedback', icon: renderIcon(ChatboxEllipsesOutline) },
   { type: 'divider', key: 'd6' },
-  { label: 'Help', key: 'help', icon: renderIcon(HelpCircleOutline) },
+  { label: '帮助', key: 'help', icon: renderIcon(HelpCircleOutline) },
   { type: 'divider', key: 'd7' },
-  { label: 'Tokyo, Japan', key: 'location', icon: renderIcon(LocationOutline) },
+  { label: '上海，中国', key: 'location', icon: renderIcon(LocationOutline) },
   { type: 'divider', key: 'd8' },
-  { label: '退出登录 (Logout)', key: 'logout', icon: renderIcon(LogOutOutline) }
+  { label: '退出登录', key: 'logout', icon: renderIcon(LogOutOutline) }
 ]
 
 const handleSettingsSelect = (key: string) => {
@@ -273,7 +392,6 @@ const handleSettingsSelect = (key: string) => {
   }
 }
 
-// ===== 文件上传处理 =====
 const handleImageSelect = () => {
   imageInputRef.value?.click()
 }
@@ -328,13 +446,11 @@ const doUpload = async (file: File) => {
   }
 }
 
-// 移除待发送附件
 const removeAttachment = (index: number) => {
   pendingAttachments.value.splice(index, 1)
 }
 
-// ===== 订单选择 =====
-const selectOrder = (order: any) => {
+const selectOrder = (order: OrderOption) => {
   if (pendingAttachments.value.some(a => a.type === 'order' && a.order_id === order.order_id)) {
     message.info('该订单已添加')
     return
@@ -350,7 +466,20 @@ const selectOrder = (order: any) => {
   message.success('已选择订单')
 }
 
-// ===== 消息快捷操作 =====
+const loadOrderOptions = async () => {
+  loadingOrderOptions.value = true
+  try {
+    const res: any = await getAvailableOrders()
+    orderOptions.value = Array.isArray(res) ? res : (res.data || [])
+  } catch (error) {
+    console.error('获取订单列表失败', error)
+    orderOptions.value = []
+    message.error('获取订单列表失败')
+  } finally {
+    loadingOrderOptions.value = false
+  }
+}
+
 const copyMessage = (content: string) => {
   navigator.clipboard.writeText(content)
   message.success('内容已复制')
@@ -363,7 +492,7 @@ const regenerateMessage = (index: number) => {
     userMsgIndex--
   }
   if (userMsgIndex < 0) return
-  
+
   const userMsg = messages.value[userMsgIndex]
   inputValue.value = userMsg.content === '[附件]' ? '' : userMsg.content
   if (userMsg.attachments && userMsg.attachments.length > 0) {
@@ -389,7 +518,6 @@ const deleteMessage = (index: number) => {
   }
 }
 
-// ===== 拖拽上传 =====
 let dragCounter = 0
 const onDragOver = (e: DragEvent) => {
   e.preventDefault()
@@ -418,8 +546,7 @@ const onDrop = async (e: DragEvent) => {
   }
 }
 
-// ===== 商品选择 =====
-const selectProduct = (product: any) => {
+const selectProduct = (product: ProductOption) => {
   if (pendingAttachments.value.some(a => a.type === 'product' && a.product_id === product.product_id)) {
     message.info('该商品已添加')
     return
@@ -435,7 +562,20 @@ const selectProduct = (product: any) => {
   message.success('已选择商品')
 }
 
-// 格式化文件大小
+const loadProductOptions = async () => {
+  loadingProductOptions.value = true
+  try {
+    const res: any = await getAvailableProducts()
+    productOptions.value = Array.isArray(res) ? res : (res.data || [])
+  } catch (error) {
+    console.error('获取商品列表失败', error)
+    productOptions.value = []
+    message.error('获取商品列表失败')
+  } finally {
+    loadingProductOptions.value = false
+  }
+}
+
 const formatSize = (bytes?: number) => {
   if (!bytes) return ''
   if (bytes < 1024) return bytes + ' B'
@@ -443,9 +583,12 @@ const formatSize = (bytes?: number) => {
   return (bytes / 1048576).toFixed(1) + ' MB'
 }
 
-// 获取订单状态类型
 const getStatusType = (status: string): "default" | "success" | "warning" | "error" | "info" => {
   const map: Record<string, "default" | "success" | "warning" | "error" | "info"> = {
+    delivered: 'success',
+    shipped: 'info',
+    processing: 'warning',
+    pending: 'error',
     '已签收': 'success',
     '已发货': 'info',
     '处理中': 'warning',
@@ -454,12 +597,21 @@ const getStatusType = (status: string): "default" | "success" | "warning" | "err
   return map[status] || 'default'
 }
 
-// 滚动到底部
 const scrollToBottom = () => {
   nextTick(() => {
     if (scrollContainerRef.value) {
       scrollContainerRef.value.scrollTop = scrollContainerRef.value.scrollHeight
     }
+  })
+}
+
+let scrollRafPending = false
+const scheduleScrollToBottom = () => {
+  if (scrollRafPending) return
+  scrollRafPending = true
+  requestAnimationFrame(() => {
+    scrollRafPending = false
+    scrollToBottom()
   })
 }
 
@@ -469,7 +621,6 @@ const handleScroll = (e: Event) => {
   showScrollToBottom.value = !isNearBottom
 }
 
-// 获取消息列表
 const fetchMessages = async () => {
   if (!conversationId.value) return
   isLoading.value = true
@@ -482,12 +633,16 @@ const fetchMessages = async () => {
         if (msg.metadata_.attachments) {
           msg.attachments = msg.metadata_.attachments
         }
+        if (msg.metadata_.action_button_prompt) {
+          msg.actionButtonPrompt = msg.metadata_.action_button_prompt
+        }
         if (msg.metadata_.action_buttons) {
           msg.actionButtons = msg.metadata_.action_buttons.map((a: any) => ({ ...a, disabled: false }))
         }
       }
+      finalizeAssistantMessage(msg)
     })
-    scrollToBottom()
+    scheduleScrollToBottom()
   } catch (error) {
     console.error(error)
   } finally {
@@ -505,14 +660,14 @@ watch(() => route.params.id, async (newId) => {
     // 加载完成后根据消息数量决定是否显示欢迎语
     showWelcome.value = messages.value.length === 0
   } else {
-    // 仅在非发送状态时才清空（避免新对话发送中被清空）
+    // 仅在非发送状态时清空（避免新对话发送中被清空）
     if (!sending.value) {
       messages.value = []
       conversationId.value = ''
       showWelcome.value = true
     }
   }
-  // 任何路由改变都刷新一下列表
+  // 任意路由变化都刷新一次会话列表
   fetchConversationList()
 })
 
@@ -521,76 +676,74 @@ const handleSend = async () => {
   const content = inputValue.value.trim()
   if (!content && pendingAttachments.value.length === 0) return
 
-  // 检查登录状态
   if (!userStore.token) {
     message.warning('请先登录后再发送消息')
     router.push('/login')
     return
   }
 
-  // 标记是否是新创建的会话（需要在流式结束后导航）
-  let isNewConversation = false
-
-  // 如果没有 conversationId，先创建会话
-  if (!conversationId.value) {
-    try {
-      isLoading.value = true
-      const titleText = content || pendingAttachments.value[0]?.name || '新对话'
-      const res: any = await createConversation({ title: titleText.slice(0, 30) })
-      conversationId.value = res.id || res.data?.id
-      if (!conversationId.value) {
-        throw new Error('创建会话失败')
-      }
-      isNewConversation = true
-      fetchConversationList() // 立即更新侧边栏
-      emit('refresh')
-    } catch (error) {
-      console.error(error)
-      message.error('创建会话失败，请刷新页面重试')
-      isLoading.value = false
-      return
-    }
-  }
-
   if (sending.value) return
 
-  // 收集附件
   const attachments = pendingAttachments.value.length > 0
     ? [...pendingAttachments.value]
     : undefined
 
-  // 添加用户消息（包含附件）
   messages.value.push({
     role: 'user',
     content: content || (attachments ? '[附件]' : ''),
-    attachments: attachments,
+    attachments,
     created_at: new Date().toISOString()
   })
 
   inputValue.value = ''
   pendingAttachments.value = []
-  scrollToBottom()
+  scheduleScrollToBottom()
   sending.value = true
 
-  // 创建 AI 回复占位（包含打字动画 + 思考过程状态）
   const aiMessage = {
     role: 'assistant',
     content: '',
     loading: true,
     thinkingSteps: [] as { step: string; content?: string }[],
     thinkingDone: false,
+    actionButtonPrompt: '',
     actionButtons: [] as { type: string; label: string; action: string; style?: string; order_id?: string; product?: string; status?: string; amount?: string; disabled?: boolean }[],
+    structuredBlocks: [] as StructuredBlock[],
+    renderedHtml: '',
+    metrics: {} as Record<string, any>,
     created_at: new Date().toISOString()
   }
   messages.value.push(aiMessage)
   const aiMessageIndex = messages.value.length - 1
 
+  let streamConversationId = conversationId.value || ''
+  let pendingChunkText = ''
+  let flushTimer: ReturnType<typeof setTimeout> | null = null
+  let streamDone = false
+
+  const flushChunkBuffer = () => {
+    if (!pendingChunkText) return
+    messages.value[aiMessageIndex].content += pendingChunkText
+    pendingChunkText = ''
+    scheduleScrollToBottom()
+  }
+
+  const scheduleChunkFlush = () => {
+    if (flushTimer) return
+    flushTimer = setTimeout(() => {
+      flushTimer = null
+      flushChunkBuffer()
+    }, 24)
+  }
+
   try {
     const body: any = {
       message: content || '[用户发送了附件]',
-      conversation_id: conversationId.value,
       web_search: webSearchEnabled.value,
       persona_style: selectedPersona.value,
+    }
+    if (streamConversationId) {
+      body.conversation_id = streamConversationId
     }
     if (attachments) {
       body.attachments = attachments
@@ -624,73 +777,86 @@ const handleSend = async () => {
       buffer = lines.pop() || ''
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6).trim()
-          if (dataStr === '[DONE]') continue
+        if (!line.startsWith('data: ')) continue
+        const dataStr = line.slice(6).trim()
+        if (!dataStr || dataStr === '[DONE]') continue
 
-          try {
-            const data = JSON.parse(dataStr)
-            if (data.type === 'thinking' || data.type === 'tool_call') {
-              messages.value[aiMessageIndex].thinkingSteps.push({
-                step: data.step || (data.type === 'thinking' ? '思考中...' : '调用工具...'),
-                content: data.content || '',
-              })
-              scrollToBottom()
-            } else if (data.type === 'chunk' && data.content) {
-              if (!messages.value[aiMessageIndex].thinkingDone) {
-                messages.value[aiMessageIndex].thinkingDone = true
+        try {
+          const data = JSON.parse(dataStr)
+
+          if (data.type === 'meta') {
+            if (data.conversation_id) {
+              streamConversationId = data.conversation_id
+              if (conversationId.value !== streamConversationId) {
+                conversationId.value = streamConversationId
+                router.replace(`/chat/${streamConversationId}`)
+                void fetchConversationList()
               }
-              messages.value[aiMessageIndex].content += data.content
-              scrollToBottom()
-            } else if (data.type === 'action_buttons' && data.actions) {
-              // 交互式按钮（退货订单选择、确认/取消等）
-              const actions = data.actions.map((a: any) => ({ ...a, disabled: false }))
-              messages.value[aiMessageIndex].actionButtons.push(...actions)
-              scrollToBottom()
-            } else if (data.type === 'error') {
-              messages.value[aiMessageIndex].content = `错误: ${data.error || '未知错误'}`
             }
-          } catch {
-            // Ignore unparseable SSE data
+            if (data.metrics) {
+              messages.value[aiMessageIndex].metrics = data.metrics
+            }
+          } else if (data.type === 'thinking' || data.type === 'tool_call') {
+            messages.value[aiMessageIndex].thinkingSteps.push({
+              step: data.step || (data.type === 'thinking' ? '思考中...' : '调用工具...'),
+              content: data.content || '',
+            })
+            scheduleScrollToBottom()
+          } else if (data.type === 'chunk' && data.content) {
+            if (!messages.value[aiMessageIndex].thinkingDone) {
+              messages.value[aiMessageIndex].thinkingDone = true
+            }
+            pendingChunkText += data.content
+            scheduleChunkFlush()
+          } else if (data.type === 'done') {
+            streamDone = true
+            if (data.message_id) {
+              messages.value[aiMessageIndex].message_id = data.message_id
+            }
+          } else if (data.type === 'action_buttons' && data.actions) {
+            if (data.content) {
+              messages.value[aiMessageIndex].actionButtonPrompt = data.content
+            }
+            const actions = data.actions.map((a: any) => ({ ...a, disabled: false }))
+            messages.value[aiMessageIndex].actionButtons.push(...actions)
+            scheduleScrollToBottom()
+          } else if (data.type === 'error') {
+            messages.value[aiMessageIndex].content = `错误: ${data.error || '未知错误'}`
           }
+        } catch {
+          // Ignore unparseable SSE line
         }
       }
     }
-
   } catch (error: any) {
     console.error(error)
     message.error(error.message || '发送消息失败')
     messages.value[aiMessageIndex].content = '抱歉，消息发送失败，请稍后重试。'
   } finally {
-    messages.value[aiMessageIndex].loading = false
-    sending.value = false
-    scrollToBottom()
+    if (flushTimer) {
+      clearTimeout(flushTimer)
+      flushTimer = null
+    }
+    flushChunkBuffer()
 
-    // 发送消息后，隐藏欢迎语
+    messages.value[aiMessageIndex].loading = false
+    messages.value[aiMessageIndex].thinkingDone = true
+    finalizeAssistantMessage(messages.value[aiMessageIndex])
+    if (!streamDone && !messages.value[aiMessageIndex].content) {
+      messages.value[aiMessageIndex].content = '抱歉，本次响应未完整返回，请重试。'
+    }
+
+    sending.value = false
+    scheduleScrollToBottom()
     showWelcome.value = false
 
-    // 流式结束后，如果是新会话，更新 URL
-    if (isNewConversation && conversationId.value) {
-      router.replace(`/chat/${conversationId.value}`)
-    }
-
-    // 发送成功后更新对话标题（第一条消息）
-    if (messages.value.length === 2 && conversationId.value) {
-      const firstMessage = messages.value[0].content
-      const title = firstMessage.slice(0, 30) + (firstMessage.length > 30 ? '...' : '')
-      try {
-        await updateConversation(conversationId.value, { title })
-        emit('refresh')
-      } catch (e) {
-        console.error('更新标题失败', e)
-      }
-    }
+    void fetchConversationList()
+    emit('refresh')
   }
 }
+const userName = computed(() => userStore.user?.name || '用户')
 
-const userName = computed(() => userStore.user?.name || 'User')
-
-// 处理交互按钮点击（退货订单选择、确认/取消）
+// 处理交互按钮点击（退货订单选择、确认取消）
 const handleActionClick = (action: any, msgIndex: number) => {
   if (action.disabled || sending.value) return
   // 禁用同组所有按钮
@@ -704,10 +870,15 @@ const handleActionClick = (action: any, msgIndex: number) => {
 }
 
 // Plus 按钮的弹出菜单
-const handlePlusCommand = (key: string) => {
+const handlePlusCommand = async (key: string) => {
   if (key === 'file') handleFileSelect()
-  else if (key === 'order') showOrderDrawer.value = true
-  else if (key === 'product') showProductDrawer.value = true
+  else if (key === 'order') {
+    showOrderDrawer.value = true
+    await loadOrderOptions()
+  } else if (key === 'product') {
+    showProductDrawer.value = true
+    await loadProductOptions()
+  }
 }
 
 const openImagePreview = (url: string) => {
@@ -722,7 +893,7 @@ onMounted(async () => {
     conversationId.value = route.params.id
     isLoading.value = true
     await fetchMessages()
-    // 加载完成后，如果没有消息才显示欢迎语
+    // 加载完成后，如果没有消息则显示欢迎语
     showWelcome.value = messages.value.length === 0
   } else {
     // 新会话
@@ -755,7 +926,7 @@ onUnmounted(() => {
         <span>释放文件以上传</span>
       </div>
     </div>
-    <!-- 侧边栏 (Gemini Layout) -->
+    <!-- 侧边栏（Gemini 布局） -->
     <div class="sidebar-wrapper" :class="{ 'is-collapsed': !isSidebarOpen }">
       <div class="sidebar-header" :style="isSidebarOpen ? '' : 'flex-direction: column; gap: 12px; align-items: center; padding: 16px 0;'">
         <div class="menu-btn" @click="toggleSidebar" :style="isSidebarOpen ? '' : 'margin: 0;'">
@@ -774,11 +945,11 @@ onUnmounted(() => {
           <!-- 第一个大按钮 -->
           <div class="new-chat-btn" @click="handleNewChat" style="margin-left: -4px;">
             <n-icon :size="18"><CreateOutline /></n-icon>
-            <span>New chat</span>
+            <span>新建会话</span>
           </div>
           
           <div class="sidebar-menu-header">
-            <span>Chats</span>
+            <span>会话列表</span>
           </div>
         </div>
         
@@ -792,7 +963,7 @@ onUnmounted(() => {
               :class="{ active: convo.id === conversationId }"
               @click="handleSelectChat(convo.id)"
             >
-              <span class="history-title">{{ convo.title || '新对话' }}</span>
+              <span class="history-title">{{ convo.title || '新会话' }}</span>
               <n-dropdown 
                 :options="chatOptions" 
                 placement="bottom-end"
@@ -817,7 +988,7 @@ onUnmounted(() => {
           <n-dropdown :options="settingsOptions" placement="top-start" @select="handleSettingsSelect">
             <div class="sidebar-menu-item">
               <n-icon :size="18" class="icon"><SettingsOutline /></n-icon>
-              <span>Settings & help</span>
+              <span>设置与帮助</span>
             </div>
           </n-dropdown>
         </div>
@@ -826,7 +997,7 @@ onUnmounted(() => {
 
     <!-- 主聊天区 -->
     <div class="chat-container">
-      <!-- 顶部 Header: Hamburger toggle when sidebar is closed, Gemini logo -->
+      <!-- 椤堕儴 Header: Hamburger toggle when sidebar is closed, Gemini logo -->
       <div class="top-nav">
         <div class="nav-left">
           <span class="gemini-logo">AI 客服助手</span>
@@ -904,7 +1075,7 @@ onUnmounted(() => {
                 <div v-if="msg.thinkingSteps && msg.thinkingSteps.length > 0" class="thinking-section" :class="{ collapsed: msg.thinkingDone }">
                   <details :open="!msg.thinkingDone">
                     <summary class="thinking-summary">
-                      <span class="thinking-label">{{ msg.thinkingDone ? '✅ 已完成分析' : '⏳ 正在分析...' }}</span>
+                      <span class="thinking-label">{{ msg.thinkingDone ? '分析完成' : '分析中...' }}</span>
                     </summary>
                     <div class="thinking-steps">
                       <div v-for="(ts, si) in msg.thinkingSteps" :key="si" class="thinking-step">
@@ -921,10 +1092,37 @@ onUnmounted(() => {
                 <div v-if="msg.role === 'assistant' && msg.loading && !msg.content && (!msg.thinkingSteps || msg.thinkingSteps.length === 0)" class="typing-indicator">
                   <span></span><span></span><span></span>
                 </div>
-                <!-- 消息内容 -->
-                <div v-if="msg.content" class="message-content" v-html="renderMarkdown(msg.content)"></div>
+                <!-- Message content -->
+                <div v-if="msg.content && msg.loading" class="message-content streaming-content">{{ msg.content }}</div>
+                <div v-else-if="msg.content && msg.structuredBlocks && msg.structuredBlocks.length > 0" class="structured-response">
+                  <div
+                    v-for="(block, bi) in msg.structuredBlocks"
+                    :key="`${index}-${bi}`"
+                    class="response-card"
+                    :class="`kind-${block.kind}`"
+                  >
+                    <div class="card-title">{{ block.title }}</div>
+                    <ul v-if="block.items && block.items.length > 0" class="card-list">
+                      <li v-for="(item, ii) in block.items" :key="ii">{{ item }}</li>
+                    </ul>
+                    <div v-if="block.metrics && block.metrics.length > 0" class="metric-grid">
+                      <div v-for="(metric, mi) in block.metrics" :key="mi" class="metric-item">
+                        <span class="metric-label">{{ metric.label }}</span>
+                        <span class="metric-value">{{ metric.value }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  v-else-if="msg.content"
+                  class="message-content"
+                  v-html="msg.renderedHtml || renderMarkdown(msg.content)"
+                ></div>
                 <!-- 交互按钮区域（退货订单选择 / 确认取消） -->
                 <div v-if="msg.actionButtons && msg.actionButtons.length > 0" class="action-buttons-area">
+                  <div v-if="msg.actionButtonPrompt" class="action-buttons-prompt">
+                    {{ msg.actionButtonPrompt }}
+                  </div>
                   <template v-for="(btn, bi) in msg.actionButtons" :key="bi">
                     <!-- 订单选择卡片 -->
                     <div v-if="btn.type === 'order_card'" class="action-order-card" :class="{ disabled: btn.disabled }" @click="handleActionClick(btn, index)">
@@ -934,9 +1132,9 @@ onUnmounted(() => {
                       </div>
                       <div class="action-order-meta">
                         <n-tag :type="getStatusType(btn.status || '')" size="small" round>{{ btn.status }}</n-tag>
-                        <span class="action-order-amount">{{ btn.amount }}</span>
+                        <span class="action-order-amount" v-if="btn.amount">¥{{ btn.amount }}</span>
                       </div>
-                      <div class="action-order-btn-label">{{ btn.disabled ? '✔ 已选择' : '点击选择退货' }}</div>
+                      <div class="action-order-btn-label">{{ btn.disabled ? '已选中，正在继续...' : '点击选择该订单' }}</div>
                     </div>
                     <!-- 确认 / 取消按钮 -->
                     <button v-else class="action-btn" :class="[btn.style || 'default', { disabled: btn.disabled }]" :disabled="btn.disabled" @click="handleActionClick(btn, index)">
@@ -964,9 +1162,9 @@ onUnmounted(() => {
               <n-avatar :size="30" round class="user-avatar" style="background-color: #9b72cb; color: white;">{{ userName.slice(0, 1) }}</n-avatar>
             </div>
 
-            <!-- User 消息快捷操作（hover 显示于左侧） -->
+            <!-- User 消息快捷操作 -->
             <div class="message-actions user-actions" v-if="msg.role === 'user'">
-              <div class="msg-action-btn" title="编辑重新发送" @click="editMessage(index)">
+              <div class="msg-action-btn" title="编辑并重发" @click="editMessage(index)">
                 <n-icon><PencilOutline /></n-icon>
               </div>
               <div class="msg-action-btn" title="删除" @click="deleteMessage(index)">
@@ -978,8 +1176,8 @@ onUnmounted(() => {
 
         <!-- 欢迎语（当没有消息时显示在消息区域中间） -->
         <div v-if="showWelcome && messages.length === 0" class="greeting-container">
-          <div class="greeting-hi"><span class="gradient-star">✨</span> Hi {{ userName }}</div>
-          <div class="greeting-sub">有什么我可以帮助你的吗</div>
+          <div class="greeting-hi"><span class="gradient-star">✨</span> 你好，{{ userName }}</div>
+          <div class="greeting-sub">有什么我可以帮助你的？</div>
         </div>
 
         <!-- 快捷短语（当没有消息时显示） -->
@@ -1061,7 +1259,7 @@ onUnmounted(() => {
           v-model:value="inputValue"
           type="textarea"
           :autosize="{ minRows: 1, maxRows: 6 }"
-          placeholder="Ask a question here"
+          placeholder="请输入你的问题"
           :bordered="false"
           class="chat-input"
           @keydown.enter.exact.prevent="handleSend"
@@ -1108,14 +1306,16 @@ onUnmounted(() => {
       <div class="disclaimer">客服小鹏可能会产生不准确的信息，请核实重要内容。</div>
     </div>
 
-    <!-- 订单选择 Drawer -->
+    <!-- 订单选择抽屉 -->
     <n-drawer v-model:show="showOrderDrawer" :width="400" placement="right">
       <n-drawer-content title="选择订单">
         <div class="drawer-list">
-          <div v-for="order in mockOrders" :key="order.order_id" class="drawer-item" @click="selectOrder(order)">
+          <div v-if="loadingOrderOptions" class="drawer-empty-state">正在加载订单数据...</div>
+          <div v-else-if="orderOptions.length === 0" class="drawer-empty-state">暂无可选订单数据</div>
+          <div v-for="order in orderOptions" v-else :key="order.order_id" class="drawer-item" @click="selectOrder(order)">
             <div class="drawer-item-top">
               <span class="drawer-item-name">{{ order.name }}</span>
-              <n-tag :type="getStatusType(order.status)" size="small" round>{{ order.status }}</n-tag>
+      <div class="disclaimer">客服小鹏可能会产生不准确的信息，请核实重要内容。</div>
             </div>
             <div class="drawer-item-bottom">
               <span class="drawer-item-id">{{ order.order_id }}</span>
@@ -1127,11 +1327,13 @@ onUnmounted(() => {
       </n-drawer-content>
     </n-drawer>
 
-    <!-- 商品选择 Drawer -->
+    <!-- 商品选择抽屉 -->
     <n-drawer v-model:show="showProductDrawer" :width="400" placement="right">
       <n-drawer-content title="选择商品">
         <div class="drawer-list">
-          <div v-for="product in mockProducts" :key="product.product_id" class="drawer-item" @click="selectProduct(product)">
+          <div v-if="loadingProductOptions" class="drawer-empty-state">正在加载商品数据...</div>
+          <div v-else-if="productOptions.length === 0" class="drawer-empty-state">暂无可选商品数据</div>
+          <div v-for="product in productOptions" v-else :key="product.product_id" class="drawer-item" @click="selectProduct(product)">
             <div class="drawer-item-top">
               <span class="drawer-item-name">{{ product.name }}</span>
               <n-tag size="small" type="info" round>{{ product.category }}</n-tag>
@@ -1145,15 +1347,15 @@ onUnmounted(() => {
       </n-drawer-content>
     </n-drawer>
 
-    <!-- 重命名 Modal -->
-    <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename chat">
+    <!-- 閲嶅懡鍚?Modal -->
+    <n-modal v-model:show="showRenameModal" preset="dialog" title="重命名会话">
       <div style="margin-top: 16px;">
-        <n-input v-model:value="renameTitle" placeholder="Enter new chat title" @keydown.enter="submitRename" />
+        <n-input v-model:value="renameTitle" placeholder="请输入新的会话标题" @keydown.enter="submitRename" />
       </div>
       <template #action>
         <div style="display: flex; gap: 12px;">
-          <button class="pill" @click="showRenameModal = false">Cancel</button>
-          <button class="pill" style="background:#0b57d0; color:white;" @click="submitRename">Save</button>
+          <button class="pill" @click="showRenameModal = false">取消</button>
+          <button class="pill" style="background:#0b57d0; color:white;" @click="submitRename">保存</button>
         </div>
       </template>
     </n-modal>
@@ -1674,6 +1876,99 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
+.streaming-content {
+  white-space: pre-wrap;
+  background: linear-gradient(180deg, #f9fbff, #f4f7ff);
+  border: 1px solid #e7eefc;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.structured-response {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.response-card {
+  border-radius: 14px;
+  border: 1px solid #e6e9ef;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 12px 14px;
+}
+
+.response-card.kind-conclusion {
+  border-left: 4px solid #1a73e8;
+}
+
+.response-card.kind-steps {
+  border-left: 4px solid #0f9d58;
+}
+
+.response-card.kind-tips {
+  border-left: 4px solid #f29900;
+}
+
+.response-card.kind-data {
+  border-left: 4px solid #6f42c1;
+}
+
+.card-title {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.card-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-list li {
+  color: var(--text-primary);
+  line-height: 1.65;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  background: #f5f8ff;
+  border: 1px solid #e0e8ff;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.metric-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.metric-value {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0b57d0;
+}
+
+@media (max-width: 768px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Typing Indicator */
 .typing-indicator {
   display: flex;
@@ -2109,11 +2404,20 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-/* ===== Drawer 样式 ===== */
+/* ===== 抽屉样式 ===== */
 .drawer-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.drawer-empty-state {
+  padding: 28px 16px;
+  border-radius: 12px;
+  text-align: center;
+  color: var(--text-tertiary);
+  background: var(--surface-color);
+  border: 1px dashed #d9d9d9;
 }
 
 .drawer-item {
@@ -2309,6 +2613,14 @@ onUnmounted(() => {
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+.action-buttons-prompt {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
 /* 订单选择卡片 */
 .action-order-card {
   display: flex;
@@ -2485,7 +2797,7 @@ onUnmounted(() => {
   color: #1a73e8;
 }
 
-/* ===== 回到最新消息按钮 ===== */
+/* ===== 回到底部按钮 ===== */
 .scroll-bottom-btn {
   position: absolute;
   bottom: 140px;

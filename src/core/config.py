@@ -108,6 +108,28 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 4096
 
+    # ── Streaming / latency behavior ──
+    ENABLE_ASYNC_POSTPROCESS: bool = Field(
+        default=True,
+        description="Whether to run memory/summary/cache post-processing in background after stream done.",
+    )
+    ENABLE_SYNC_FIRST_TURN_SUMMARY: bool = Field(
+        default=False,
+        description="Whether first-turn summary generation blocks stream completion.",
+    )
+    ENABLE_SYNC_QUALITY_REVIEW: bool = Field(
+        default=True,
+        description="Whether to run quality review on the critical path.",
+    )
+    SYNC_QUALITY_REVIEW_RISK_ONLY: bool = Field(
+        default=True,
+        description="When true, only complaint/high-risk requests run sync quality review.",
+    )
+    ENABLE_ASYNC_QUALITY_REVIEW: bool = Field(
+        default=True,
+        description="Whether to run async quality review for non-risk requests.",
+    )
+
     # ── MCP 配置 ──
     MCP_ENABLED: bool = Field(default=False, description="是否启用 MCP 增强模式（需要 MCP 服务器运行）")
 
