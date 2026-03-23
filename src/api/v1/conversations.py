@@ -67,10 +67,11 @@ async def list_conversations(
 async def get_conversation(
     conversation_id: UUID,
     db: AsyncSession = Depends(get_db_session),
+    user_id: UUID = Depends(require_current_user),
 ):
     """获取会话详情"""
     service = ConversationService(db)
-    conv = await service.get_conversation(conversation_id)
+    conv = await service.get_conversation_for_user(conversation_id, user_id)
     return ResponseWithData(data=ConversationResponse.model_validate(conv))
 
 
@@ -78,10 +79,11 @@ async def get_conversation(
 async def get_conversation_messages(
     conversation_id: UUID,
     db: AsyncSession = Depends(get_db_session),
+    user_id: UUID = Depends(require_current_user),
 ):
     """获取会话消息历史"""
     service = ConversationService(db)
-    conv = await service.get_conversation_with_messages(conversation_id)
+    conv = await service.get_conversation_with_messages_for_user(conversation_id, user_id)
     messages = [MessageResponse.model_validate(m) for m in conv.messages]
     return ResponseWithData(data=messages)
 
@@ -90,10 +92,11 @@ async def get_conversation_messages(
 async def delete_conversation_endpoint(
     conversation_id: UUID,
     db: AsyncSession = Depends(get_db_session),
+    user_id: UUID = Depends(require_current_user),
 ):
     """删除会话（物理删除）"""
     service = ConversationService(db)
-    await service.delete_conversation(conversation_id)
+    await service.delete_conversation_for_user(conversation_id, user_id)
     return {"code": 0, "message": "删除成功"}
 
 
@@ -102,11 +105,12 @@ async def update_conversation(
     conversation_id: UUID,
     request: ConversationUpdate,
     db: AsyncSession = Depends(get_db_session),
+    user_id: UUID = Depends(require_current_user),
 ):
     """更新会话"""
     service = ConversationService(db)
     update_data = request.model_dump(exclude_unset=True)
     if update_data:
-        conv = await service.conv_repo.update_by_id(conversation_id, **update_data)
+        conv = await service.update_conversation_for_user(conversation_id, user_id, **update_data)
         return ResponseWithData(data=ConversationResponse.model_validate(conv))
-    return await get_conversation(conversation_id, db)
+    return await get_conversation(conversation_id, db, user_id)

@@ -14,6 +14,8 @@ import pytest_asyncio
 # 设置测试环境
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("LOG_LEVEL", "error")
+os.environ["DEBUG"] = "false"
+os.environ["SECRET_KEY"] = "test-secret-key-for-unit-tests"
 
 # 添加项目根目录
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

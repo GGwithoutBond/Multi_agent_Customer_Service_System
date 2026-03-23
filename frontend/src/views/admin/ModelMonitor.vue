@@ -38,12 +38,12 @@ const columns = [
     }
   },
   {
-    title: '用户输入 (Prompt)',
+    title: '用户输入',
     key: 'promptSnippet',
     ellipsis: { tooltip: true }
   },
   {
-    title: '模型输出 (Output)',
+    title: '模型输出',
     key: 'outputSnippet',
     ellipsis: { tooltip: true }
   },
@@ -107,7 +107,7 @@ onMounted(() => {
       <!-- 搜索和刷新头部 -->
       <div class="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 relative z-10">
         <div class="w-full sm:w-80 group">
-          <n-input placeholder="搜索 Prompt 内容..." clearable size="large" class="shadow-sm group-hover:shadow transition-shadow !rounded-xl">
+          <n-input placeholder="搜索用户输入内容..." clearable size="large" class="shadow-sm group-hover:shadow transition-shadow !rounded-xl">
             <template #prefix>
               <n-icon class="text-slate-400"><SearchOutline /></n-icon>
             </template>

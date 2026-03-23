@@ -6,14 +6,18 @@
 import os
 import uuid
 from datetime import datetime
+from uuid import UUID
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
+from src.api.deps import require_current_user
+from src.api.rate_limit import SlidingWindowRateLimiter
 from src.core.config import get_settings
 from src.core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/upload", tags=["文件上传"])
+_upload_rate_limiter = SlidingWindowRateLimiter(window_seconds=60)
 
 # 允许的文件类型
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -33,11 +37,21 @@ MAX_FILE_SIZE = 20 * 1024 * 1024   # 20 MB
 
 
 @router.post("")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: UUID = Depends(require_current_user),
+):
     """
     上传文件（图片或文档）
     返回文件的访问 URL 和元信息
     """
+    settings = get_settings()
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"{user_id}:{client_ip}"
+    if not _upload_rate_limiter.allow(rate_key, settings.UPLOAD_RATE_LIMIT_PER_MINUTE):
+        raise HTTPException(status_code=429, detail="上传请求过于频繁，请稍后再试")
+
     # 1. 验证文件类型
     content_type = file.content_type or ""
     if content_type not in ALL_ALLOWED:
@@ -67,7 +81,6 @@ async def upload_file(file: UploadFile = File(...)):
 
     # 5. 确定子目录
     sub_dir = "images" if is_image else "files"
-    settings = get_settings()
     upload_base = os.path.join(settings.BASE_DIR if hasattr(settings, 'BASE_DIR') else ".", "uploads", sub_dir)
     os.makedirs(upload_base, exist_ok=True)
 

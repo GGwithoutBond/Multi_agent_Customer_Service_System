@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, NIcon, NAvatar, NInput, NTag, NDropdown, NDrawer, NDrawerContent, NModal } from 'naive-ui'
+import { useMessage, useDialog, NIcon, NAvatar, NInput, NTag, NDropdown, NDrawer, NDrawerContent, NModal } from 'naive-ui'
 import {
   SendOutline,
   ImageOutline,
@@ -10,8 +10,6 @@ import {
   DocumentTextOutline,
   CartOutline,
   ListOutline,
-  CloseOutline,
-  DownloadOutline,
   SearchOutline,
   SettingsOutline,
   TimeOutline,
@@ -36,12 +34,25 @@ import {
   CreateOutline,
   EllipsisVertical
 } from '@vicons/ionicons5'
-import hljs from 'highlight.js'
+import hljs from 'highlight.js/lib/core'
+import bash from 'highlight.js/lib/languages/bash'
+import css from 'highlight.js/lib/languages/css'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import markdown from 'highlight.js/lib/languages/markdown'
+import python from 'highlight.js/lib/languages/python'
+import sql from 'highlight.js/lib/languages/sql'
+import typescript from 'highlight.js/lib/languages/typescript'
+import xml from 'highlight.js/lib/languages/xml'
 import 'highlight.js/styles/github-dark.css'
 import MarkdownIt from 'markdown-it'
 import { getMessages, uploadFile, getAvailableOrders, getAvailableProducts } from '@/api/chat'
 import { updateConversation, getConversations, deleteConversation } from '@/api/conversation'
 import { useUserStore } from '@/stores/user'
+import { useChatStreamController } from '@/composables/useChatStreamController'
+import MessageActionBar from '@/components/chat/MessageActionBar.vue'
+import StreamStatusCard from '@/components/chat/StreamStatusCard.vue'
+import AttachmentItemCard from '@/components/chat/AttachmentItemCard.vue'
 
 const emit = defineEmits<{
   refresh: []
@@ -51,6 +62,22 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const message = useMessage()
+const dialog = useDialog()
+
+hljs.registerLanguage('bash', bash)
+hljs.registerLanguage('css', css)
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('js', javascript)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('markdown', markdown)
+hljs.registerLanguage('md', markdown)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('py', python)
+hljs.registerLanguage('sql', sql)
+hljs.registerLanguage('typescript', typescript)
+hljs.registerLanguage('ts', typescript)
+hljs.registerLanguage('html', xml)
+hljs.registerLanguage('xml', xml)
 
 function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -251,6 +278,14 @@ const sending = ref(false)
 const webSearchEnabled = ref(false)
 const showScrollToBottom = ref(false)
 const isDraggingFile = ref(false)
+const activeAiMessageIndex = ref<number | null>(null)
+const networkOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
+const dismissOfflineNotice = ref(false)
+
+const streamController = useChatStreamController<any>()
+const showStreamRecovery = computed(
+  () => streamController.canRecover.value || (networkOffline.value && !dismissOfflineNotice.value),
+)
 
 const isSidebarOpen = ref(window.innerWidth > 768)
 const conversations = ref<any[]>([])
@@ -290,7 +325,7 @@ const chatOptions = [
 
 const handleChatOption = async (key: string, id: string) => {
   if (key === 'share' || key === 'pin') {
-    message.info(`功能开发中: ${key}`)
+    message.info(`该能力即将上线：${key === 'share' ? '分享会话' : '置顶会话'}`)
   } else if (key === 'rename') {
     const chat = conversations.value.find(c => c.id === id)
     if (chat) {
@@ -299,19 +334,25 @@ const handleChatOption = async (key: string, id: string) => {
       showRenameModal.value = true
     }
   } else if (key === 'delete') {
-    if (confirm('确定要删除此段对话吗？此操作不可恢复。')) {
-      try {
-        await deleteConversation(id)
-        if (conversationId.value === id) {
-          router.push('/')
-        } else {
-          fetchConversationList()
+    dialog.warning({
+      title: '删除会话',
+      content: '确定要删除这段会话吗？此操作不可恢复。',
+      positiveText: '确认删除',
+      negativeText: '取消',
+      async onPositiveClick() {
+        try {
+          await deleteConversation(id)
+          if (conversationId.value === id) {
+            router.push('/')
+          } else {
+            fetchConversationList()
+          }
+          message.success('会话已删除')
+        } catch (err) {
+          message.error('删除失败，请稍后重试')
         }
-        message.success('已删除对话')
-      } catch (err) {
-        message.error('删除失败')
-      }
-    }
+      },
+    })
   }
 }
 
@@ -329,9 +370,9 @@ const submitRename = async () => {
 
 // 客服风格设置
 const personaOptions = [
-  { label: '专业型 (Professional)', key: 'professional' },
-  { label: '亲切型 (Friendly)', key: 'friendly' },
-  { label: '技术型 (Technical)', key: 'technical' }
+  { label: '专业型', key: 'professional' },
+  { label: '亲切型', key: 'friendly' },
+  { label: '技术型', key: 'technical' }
 ]
 const selectedPersona = ref('friendly')
 
@@ -544,9 +585,15 @@ const editMessage = (index: number) => {
 }
 
 const deleteMessage = (index: number) => {
-  if (confirm('确认删除这条消息吗？')) {
-    messages.value.splice(index, 1)
-  }
+  dialog.warning({
+    title: '删除消息',
+    content: '确认删除这条消息吗？',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick() {
+      messages.value.splice(index, 1)
+    },
+  })
 }
 
 let dragCounter = 0
@@ -605,13 +652,6 @@ const loadProductOptions = async () => {
   } finally {
     loadingProductOptions.value = false
   }
-}
-
-const formatSize = (bytes?: number) => {
-  if (!bytes) return ''
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / 1048576).toFixed(1) + ' MB'
 }
 
 const getStatusType = (status: string): "default" | "success" | "warning" | "error" | "info" => {
@@ -702,10 +742,16 @@ watch(() => route.params.id, async (newId) => {
   fetchConversationList()
 })
 
-// 发送消息
-const handleSend = async () => {
-  const content = inputValue.value.trim()
-  if (!content && pendingAttachments.value.length === 0) return
+interface SendOptions {
+  content?: string
+  attachments?: AttachmentItem[]
+  skipUserEcho?: boolean
+}
+
+const handleSend = async (options: SendOptions = {}) => {
+  const content = (options.content ?? inputValue.value).trim()
+  const attachments = options.attachments ?? (pendingAttachments.value.length > 0 ? [...pendingAttachments.value] : undefined)
+  if (!content && (!attachments || attachments.length === 0)) return
 
   if (!userStore.token) {
     message.warning('请先登录后再发送消息')
@@ -715,16 +761,14 @@ const handleSend = async () => {
 
   if (sending.value) return
 
-  const attachments = pendingAttachments.value.length > 0
-    ? [...pendingAttachments.value]
-    : undefined
-
-  messages.value.push({
-    role: 'user',
-    content: content || (attachments ? '[附件]' : ''),
-    attachments,
-    created_at: new Date().toISOString()
-  })
+  if (!options.skipUserEcho) {
+    messages.value.push({
+      role: 'user',
+      content: content || '[附件]',
+      attachments,
+      created_at: new Date().toISOString(),
+    })
+  }
 
   inputValue.value = ''
   pendingAttachments.value = []
@@ -742,10 +786,11 @@ const handleSend = async () => {
     structuredBlocks: [] as StructuredBlock[],
     renderedHtml: '',
     metrics: {} as Record<string, any>,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   }
   messages.value.push(aiMessage)
   const aiMessageIndex = messages.value.length - 1
+  activeAiMessageIndex.value = aiMessageIndex
 
   let streamConversationId = conversationId.value || ''
   let pendingChunkText = ''
@@ -767,6 +812,14 @@ const handleSend = async () => {
     }, 24)
   }
 
+  const signal = streamController.begin({
+    content,
+    attachments,
+    conversationId: streamConversationId,
+    webSearch: webSearchEnabled.value,
+    personaStyle: selectedPersona.value,
+  })
+
   try {
     const body: any = {
       message: content || '[用户发送了附件]',
@@ -784,9 +837,10 @@ const handleSend = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userStore.token}`
+        'Authorization': `Bearer ${userStore.token}`,
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal,
     })
 
     if (!response.ok) {
@@ -861,8 +915,23 @@ const handleSend = async () => {
     }
   } catch (error: any) {
     console.error(error)
-    message.error(error.message || '发送消息失败')
-    messages.value[aiMessageIndex].content = '抱歉，消息发送失败，请稍后重试。'
+    if (error?.name === 'AbortError') {
+      if (networkOffline.value) {
+        streamController.offline('网络连接中断，当前回复已停止。')
+        messages.value[aiMessageIndex].content = messages.value[aiMessageIndex].content || '网络中断，响应已停止。可点击“重试上一条”。'
+      } else {
+        messages.value[aiMessageIndex].content = messages.value[aiMessageIndex].content || '已停止生成。你可以继续提问或重试上一条。'
+      }
+    } else {
+      const errorMsg = error.message || '发送消息失败'
+      if (networkOffline.value || !navigator.onLine) {
+        streamController.offline('网络连接异常，建议点击“重试上一条”。')
+      } else {
+        streamController.fail(errorMsg)
+      }
+      message.error(errorMsg)
+      messages.value[aiMessageIndex].content = '抱歉，消息发送失败，请稍后重试。'
+    }
   } finally {
     if (flushTimer) {
       clearTimeout(flushTimer)
@@ -873,17 +942,60 @@ const handleSend = async () => {
     messages.value[aiMessageIndex].loading = false
     messages.value[aiMessageIndex].thinkingDone = true
     finalizeAssistantMessage(messages.value[aiMessageIndex])
+
     if (!streamDone && !messages.value[aiMessageIndex].content) {
-      messages.value[aiMessageIndex].content = '抱歉，本次响应未完整返回，请重试。'
+      if (streamController.state.value === 'offline') {
+        messages.value[aiMessageIndex].content = '网络连接中断，回答未完成，请重试。'
+      } else if (streamController.state.value === 'stopped') {
+        messages.value[aiMessageIndex].content = '回答已停止生成，可点击重试继续。'
+      } else {
+        messages.value[aiMessageIndex].content = '抱歉，本次响应未完整返回，请重试。'
+      }
+    }
+
+    if (streamDone && streamController.state.value === 'streaming') {
+      streamController.finish()
     }
 
     sending.value = false
+    activeAiMessageIndex.value = null
     scheduleScrollToBottom()
     showWelcome.value = false
 
     void fetchConversationList()
     emit('refresh')
   }
+}
+
+const handleStopGenerating = () => {
+  if (!sending.value) return
+  const stopped = streamController.stop()
+  if (stopped) {
+    message.info('已停止生成')
+  }
+}
+
+const handleRetryLastRequest = async () => {
+  const lastRequest = streamController.lastRequest.value
+  if (!lastRequest || sending.value) return
+  await handleSend({
+    content: lastRequest.content,
+    attachments: lastRequest.attachments as AttachmentItem[] | undefined,
+  })
+}
+
+const handleRecoverConversation = () => {
+  streamController.clearNotice()
+  message.success('会话已恢复，可继续提问')
+}
+
+const dismissStreamRecovery = () => {
+  if (networkOffline.value) {
+    dismissOfflineNotice.value = true
+    return
+  }
+  if (sending.value) return
+  streamController.clearNotice()
 }
 const userName = computed(() => userStore.user?.name || '用户')
 
@@ -916,9 +1028,34 @@ const openImagePreview = (url: string) => {
   window.open(url, '_blank')
 }
 
+const onNetworkOffline = () => {
+  networkOffline.value = true
+  dismissOfflineNotice.value = false
+  if (!sending.value) {
+    streamController.offline('当前网络不可用，恢复后可重试上一条消息。')
+    return
+  }
+  if (streamController.canStop.value) {
+    streamController.stop()
+  }
+  streamController.offline('网络连接中断，当前回复已停止。')
+  message.warning('网络连接已断开，已暂停本次生成')
+}
+
+const onNetworkOnline = () => {
+  networkOffline.value = false
+  dismissOfflineNotice.value = false
+  if (streamController.state.value === 'offline') {
+    message.success('网络已恢复，你可以重试上一条或继续会话')
+  }
+}
+
 let resizeObserver: ResizeObserver | null = null
 
 onMounted(async () => {
+  window.addEventListener('offline', onNetworkOffline)
+  window.addEventListener('online', onNetworkOnline)
+
   fetchConversationList()
   if (route.params.id && typeof route.params.id === 'string') {
     conversationId.value = route.params.id
@@ -942,6 +1079,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('offline', onNetworkOffline)
+  window.removeEventListener('online', onNetworkOnline)
   if (resizeObserver) resizeObserver.disconnect()
 })
 </script>
@@ -959,11 +1098,11 @@ onUnmounted(() => {
     </div>
     <!-- 侧边栏（Gemini 布局） -->
     <div class="sidebar-wrapper" :class="{ 'is-collapsed': !isSidebarOpen }">
-      <div class="sidebar-header" :style="isSidebarOpen ? '' : 'flex-direction: column; gap: 12px; align-items: center; padding: 16px 0;'">
-        <div class="menu-btn" @click="toggleSidebar" :style="isSidebarOpen ? '' : 'margin: 0;'">
+      <div class="sidebar-header" :class="{ 'sidebar-header-compact': !isSidebarOpen }">
+        <div class="menu-btn" :class="{ 'menu-btn-compact': !isSidebarOpen }" @click="toggleSidebar">
           <n-icon :size="20"><MenuOutline /></n-icon>
         </div>
-        <div class="menu-btn" title="搜索" @click="router.push('/search')" :style="isSidebarOpen ? 'margin-left:4px;' : 'margin: 0;'">
+        <div class="menu-btn search-menu-btn" :class="{ 'menu-btn-compact': !isSidebarOpen }" title="搜索" @click="router.push('/search')">
           <n-icon :size="18"><SearchOutline /></n-icon>
         </div>
       </div>
@@ -974,7 +1113,7 @@ onUnmounted(() => {
         <!-- Fixed Top Section inside scrollable content area -->
         <div class="sidebar-top-section">
           <!-- 第一个大按钮 -->
-          <div class="new-chat-btn" @click="handleNewChat" style="margin-left: -4px;">
+          <div class="new-chat-btn new-chat-btn-shift" @click="handleNewChat">
             <n-icon :size="18"><CreateOutline /></n-icon>
             <span>新建会话</span>
           </div>
@@ -985,7 +1124,7 @@ onUnmounted(() => {
         </div>
         
         <!-- Scrollable Section -->
-        <div class="chat-history-container">
+        <div class="chat-history-container ds-scrollbar">
           <div class="chat-history-list">
             <div
               v-for="convo in conversations"
@@ -1011,9 +1150,9 @@ onUnmounted(() => {
         
         <!-- Bottom Settings & Avatar -->
         <div class="sidebar-bottom">
-          <div class="sidebar-menu-item" style="padding-left: 8px;">
-            <n-avatar round :size="24" class="user-avatar" style="background-color: #9b72cb;">{{ userName.slice(0, 1) }}</n-avatar>
-            <span style="font-weight: 500; color: var(--text-primary);">{{ userName }}</span>
+          <div class="sidebar-menu-item sidebar-profile-item">
+            <n-avatar round :size="24" class="user-avatar user-avatar-pill">{{ userName.slice(0, 1) }}</n-avatar>
+            <span class="sidebar-user-name">{{ userName }}</span>
           </div>
 
           <n-dropdown :options="settingsOptions" placement="top-start" @select="handleSettingsSelect">
@@ -1040,7 +1179,7 @@ onUnmounted(() => {
       <input ref="fileInputRef" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" @change="onFileChange" />
 
     <!-- 消息列表区域 -->
-    <div ref="scrollContainerRef" class="chat-area" @scroll="handleScroll">
+    <div ref="scrollContainerRef" class="chat-area ds-scrollbar" @scroll="handleScroll">
       <div ref="innerRef" class="messages-wrapper">
         <!-- 消息列表 -->
         <template v-if="messages.length > 0">
@@ -1052,55 +1191,19 @@ onUnmounted(() => {
               </n-avatar>
             </div>
 
-            <div class="message-content-wrapper" :style="msg.role === 'user' ? 'display: flex; flex-direction: column; align-items: flex-end;' : ''">
+            <div class="message-content-wrapper" :class="{ 'message-content-wrapper-user': msg.role === 'user' }">
               <div class="message-heading" v-if="msg.role === 'assistant'">
                 <span class="sender-name">客服小鹏</span>
               </div>
               <div class="message-bubble">
-                <!-- 附件渲染 -->
                 <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
-                  <template v-for="(att, ai) in msg.attachments" :key="ai">
-                    <!-- 图片附件 -->
-                    <div v-if="att.type === 'image'" class="att-image">
-                      <img :src="att.url" :alt="att.name" @click="openImagePreview(att.url)" />
-                    </div>
-                    <!-- 文件附件 -->
-                    <div v-else-if="att.type === 'file'" class="att-file">
-                      <n-icon class="att-file-icon" :size="28"><DocumentTextOutline /></n-icon>
-                      <div class="att-file-info">
-                        <span class="att-file-name">{{ att.name }}</span>
-                        <span class="att-file-size">{{ formatSize(att.size) }}</span>
-                      </div>
-                      <a :href="att.url" target="_blank" class="att-download">
-                        <n-icon :size="20"><DownloadOutline /></n-icon>
-                      </a>
-                    </div>
-                    <!-- 订单卡片 -->
-                    <div v-else-if="att.type === 'order'" class="att-order">
-                      <div class="att-card-header">
-                        <n-icon><ListOutline /></n-icon>
-                        <span>订单</span>
-                        <n-tag :type="getStatusType(att.status)" size="small" round>{{ att.status }}</n-tag>
-                      </div>
-                      <div class="att-card-body">
-                        <span class="att-card-title">{{ att.name }}</span>
-                        <span class="att-card-id">{{ att.order_id }}</span>
-                      </div>
-                      <div class="att-card-price" v-if="att.price">¥{{ att.price }}</div>
-                    </div>
-                    <!-- 商品卡片 -->
-                    <div v-else-if="att.type === 'product'" class="att-product">
-                      <div class="att-card-header">
-                        <n-icon><CartOutline /></n-icon>
-                        <span>商品</span>
-                      </div>
-                      <div class="att-card-body">
-                        <span class="att-card-title">{{ att.name }}</span>
-                        <span class="att-card-id">{{ att.product_id }}</span>
-                      </div>
-                      <div class="att-card-price" v-if="att.price">¥{{ att.price }}</div>
-                    </div>
-                  </template>
+                  <AttachmentItemCard
+                    v-for="(att, ai) in msg.attachments"
+                    :key="`${index}-${ai}`"
+                    :item="att"
+                    mode="message"
+                    @open="openImagePreview"
+                  />
                 </div>
                 <!-- 思考过程（可折叠） -->
                 <div v-if="msg.thinkingSteps && msg.thinkingSteps.length > 0" class="thinking-section" :class="{ collapsed: msg.thinkingDone }">
@@ -1173,35 +1276,40 @@ onUnmounted(() => {
                     </button>
                   </template>
                 </div>
-                <!-- AI 消息快捷操作 -->
-                <div class="message-actions ai-actions" v-if="!msg.loading">
-                  <div class="msg-action-btn" title="复制" @click="copyMessage(msg.content)">
-                    <n-icon><CopyOutline /></n-icon>
-                  </div>
-                  <div class="msg-action-btn" title="重新生成" @click="regenerateMessage(index)">
-                    <n-icon><RefreshOutline /></n-icon>
-                  </div>
-                  <div class="msg-action-btn" title="删除" @click="deleteMessage(index)">
-                    <n-icon><TrashOutline /></n-icon>
-                  </div>
-                </div>
+                <MessageActionBar
+                  v-if="!msg.loading"
+                  align="left"
+                  :actions="[
+                    { key: 'copy', title: '复制', icon: CopyOutline },
+                    { key: 'retry', title: '重新生成', icon: RefreshOutline },
+                    { key: 'delete', title: '删除', icon: TrashOutline }
+                  ]"
+                  @trigger="(key) => {
+                    if (key === 'copy') copyMessage(msg.content)
+                    else if (key === 'retry') regenerateMessage(index)
+                    else if (key === 'delete') deleteMessage(index)
+                  }"
+                />
               </div>
             </div>
 
             <!-- Avatar for User -->
             <div class="message-avatar" v-if="msg.role === 'user'">
-              <n-avatar :size="30" round class="user-avatar" style="background-color: #9b72cb; color: white;">{{ userName.slice(0, 1) }}</n-avatar>
+              <n-avatar :size="30" round class="user-avatar user-avatar-pill">{{ userName.slice(0, 1) }}</n-avatar>
             </div>
 
-            <!-- User 消息快捷操作 -->
-            <div class="message-actions user-actions" v-if="msg.role === 'user'">
-              <div class="msg-action-btn" title="编辑并重发" @click="editMessage(index)">
-                <n-icon><PencilOutline /></n-icon>
-              </div>
-              <div class="msg-action-btn" title="删除" @click="deleteMessage(index)">
-                <n-icon><TrashOutline /></n-icon>
-              </div>
-            </div>
+            <MessageActionBar
+              v-if="msg.role === 'user'"
+              align="right"
+              :actions="[
+                { key: 'edit', title: '编辑并重发', icon: PencilOutline },
+                { key: 'delete', title: '删除', icon: TrashOutline }
+              ]"
+              @trigger="(key) => {
+                if (key === 'edit') editMessage(index)
+                else if (key === 'delete') deleteMessage(index)
+              }"
+            />
           </div>
         </template>
 
@@ -1242,32 +1350,16 @@ onUnmounted(() => {
       <Transition name="slide-up">
         <div v-if="pendingAttachments.length > 0" class="pending-attachments">
           <TransitionGroup name="att-item">
-            <div v-for="(att, idx) in pendingAttachments" :key="idx" class="pending-item">
-              <!-- 图片预览 -->
-              <template v-if="att.type === 'image'">
-                <img :src="att.url" class="pending-thumb" />
-                <span class="pending-name">{{ att.name }}</span>
-              </template>
-              <!-- 文件 -->
-              <template v-else-if="att.type === 'file'">
-                <n-icon class="pending-file-icon" :size="22"><DocumentTextOutline /></n-icon>
-                <span class="pending-name">{{ att.name }}</span>
-                <span class="pending-size">{{ formatSize(att.size) }}</span>
-              </template>
-              <!-- 订单 -->
-              <template v-else-if="att.type === 'order'">
-                <n-icon class="pending-file-icon" :size="22"><ListOutline /></n-icon>
-                <span class="pending-name">订单: {{ att.name }}</span>
-              </template>
-              <!-- 商品 -->
-              <template v-else-if="att.type === 'product'">
-                <n-icon class="pending-file-icon" :size="22"><CartOutline /></n-icon>
-                <span class="pending-name">商品: {{ att.name }}</span>
-              </template>
-              <div class="pending-remove" @click="removeAttachment(idx)">
-                <n-icon :size="14"><CloseOutline /></n-icon>
-              </div>
-            </div>
+            <AttachmentItemCard
+              v-for="(att, idx) in pendingAttachments"
+              :key="`${att.type}-${idx}`"
+              class="pending-item"
+              :item="att"
+              mode="pending"
+              removable
+              @remove="removeAttachment(idx)"
+              @open="openImagePreview"
+            />
           </TransitionGroup>
         </div>
       </Transition>
@@ -1300,9 +1392,17 @@ onUnmounted(() => {
           <div class="tool-btn" v-if="!inputValue && pendingAttachments.length === 0">
             <n-icon :size="20"><MicOutline /></n-icon>
           </div>
+          <button
+            v-if="sending"
+            type="button"
+            class="stop-btn"
+            @click="handleStopGenerating"
+          >
+            停止生成
+          </button>
           <Transition name="scale">
             <div
-              v-if="inputValue || pendingAttachments.length > 0"
+              v-if="!sending && (inputValue || pendingAttachments.length > 0)"
               class="send-btn"
               :class="{ sending: sending }"
               @click="handleSend"
@@ -1329,11 +1429,21 @@ onUnmounted(() => {
         <n-dropdown :options="personaOptions" @select="(key) => selectedPersona = key">
           <div class="persona-toggle">
             <span class="persona-icon">🎭</span>
-            <span>风格: {{ personaOptions.find(o => o.key === selectedPersona)?.label.split(' ')[0] || '默认' }}</span>
+            <span>风格: {{ personaOptions.find(o => o.key === selectedPersona)?.label || '默认' }}</span>
           </div>
         </n-dropdown>
       </div>
 
+      <StreamStatusCard
+        v-if="showStreamRecovery"
+        :state="networkOffline ? 'offline' : streamController.state.value"
+        :reason="streamController.reason.value || (networkOffline ? '网络不可用，恢复后可重试上一条消息。' : '')"
+        :can-retry="!!streamController.lastRequest.value && !sending"
+        @retry="handleRetryLastRequest"
+        @recover="handleRecoverConversation"
+        @dismiss="dismissStreamRecovery"
+      />
+      
       <div class="disclaimer">客服小鹏可能会产生不准确的信息，请核实重要内容。</div>
     </div>
 
@@ -1346,7 +1456,6 @@ onUnmounted(() => {
           <div v-for="order in orderOptions" v-else :key="order.order_id" class="drawer-item" @click="selectOrder(order)">
             <div class="drawer-item-top">
               <span class="drawer-item-name">{{ order.name }}</span>
-      <div class="disclaimer">客服小鹏可能会产生不准确的信息，请核实重要内容。</div>
             </div>
             <div class="drawer-item-bottom">
               <span class="drawer-item-id">{{ order.order_id }}</span>
@@ -1380,13 +1489,13 @@ onUnmounted(() => {
 
     <!-- 閲嶅懡鍚?Modal -->
     <n-modal v-model:show="showRenameModal" preset="dialog" title="重命名会话">
-      <div style="margin-top: 16px;">
+      <div class="rename-input-wrap">
         <n-input v-model:value="renameTitle" placeholder="请输入新的会话标题" @keydown.enter="submitRename" />
       </div>
       <template #action>
-        <div style="display: flex; gap: 12px;">
+        <div class="rename-actions">
           <button class="pill" @click="showRenameModal = false">取消</button>
-          <button class="pill" style="background:#0b57d0; color:white;" @click="submitRename">保存</button>
+          <button class="pill rename-save-btn" @click="submitRename">保存</button>
         </div>
       </template>
     </n-modal>
@@ -1399,33 +1508,22 @@ onUnmounted(() => {
 
 
 .app-layout {
-  --bg-color: #f0f4f9;
-  --surface-color: #ffffff;
-  --text-primary: #1f1f1f;
-  --text-secondary: #444746;
-  --text-tertiary: #5f6368;
-  --surface-hover: #e3e8ee;
-  --active-bg: #d3e3fd;
-  --active-text: #041e49;
-  --hover-dark: #dfe4ea;
-  --primary-color: #1a73e8;
-
-  --bg-color: var(--bg-color);
-  --surface-color: var(--surface-color);
-  --text-primary: var(--text-primary);
-  --text-secondary: var(--text-secondary);
-  --text-tertiary: var(--text-tertiary);
-  --surface-hover: var(--surface-hover);
-  --active-bg: var(--active-bg);
-  --active-text: var(--active-text);
-  --hover-dark: var(--hover-dark);
-  --primary-color: #1a73e8;
+  --bg-color: var(--ds-bg-page);
+  --surface-color: var(--ds-bg-surface);
+  --text-primary: var(--ds-text-primary);
+  --text-secondary: var(--ds-text-secondary);
+  --text-tertiary: var(--ds-text-tertiary);
+  --surface-hover: var(--ds-bg-elevated);
+  --active-bg: var(--ds-brand-soft);
+  --active-text: var(--ds-brand-hover);
+  --hover-dark: #d8e2f9;
+  --primary-color: var(--ds-brand);
 
   display: flex;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background-color: var(--bg-color); /* The super subtle light grey background */
+  background-color: var(--bg-color);
 }
 
 /* Apps and sidebar mini-state */
@@ -1518,6 +1616,13 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.sidebar-header-compact {
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 0;
+}
+
 .menu-btn {
   width: 40px;
   height: 40px;
@@ -1532,6 +1637,14 @@ onUnmounted(() => {
 
 .menu-btn:hover {
   background-color: var(--hover-dark);
+}
+
+.search-menu-btn {
+  margin-left: 4px;
+}
+
+.menu-btn-compact {
+  margin: 0;
 }
 
 .sidebar-content {
@@ -1551,7 +1664,7 @@ onUnmounted(() => {
   bottom: 0;
   opacity: 0.03;
   pointer-events: none;
-  background-image: radial-gradient(#1a73e8 0.5px, transparent 0.5px);
+  background-image: radial-gradient(var(--ds-brand) 0.5px, transparent 0.5px);
   background-size: 10px 10px;
   z-index: 0;
 }
@@ -1740,7 +1853,7 @@ onUnmounted(() => {
 
 .upgrade-btn {
   background-color: var(--active-bg);
-  color: #0b57d0;
+  color: var(--ds-brand-hover);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 14px;
@@ -1753,7 +1866,7 @@ onUnmounted(() => {
 }
 
 .user-avatar {
-  background-color: #9b72cb;
+  background-color: #7b4fff;
   color: white;
   font-weight: 500;
   font-size: 16px;
@@ -1797,7 +1910,7 @@ onUnmounted(() => {
 }
 
 .gradient-star {
-  background: linear-gradient(90deg, #4285F4, #9B72CB, #D96570);
+  background: linear-gradient(90deg, #4285F4, #7b4fff, #D96570);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1872,7 +1985,7 @@ onUnmounted(() => {
 }
 
 .ai-avatar {
-  background: linear-gradient(135deg, #4285f4, #9b72cb);
+  background: linear-gradient(135deg, #4285f4, #7b4fff);
   color: var(--surface-color);
 }
 
@@ -1930,7 +2043,7 @@ onUnmounted(() => {
 }
 
 .response-card.kind-conclusion {
-  border-left: 4px solid #1a73e8;
+  border-left: 4px solid var(--ds-brand);
 }
 
 .response-card.kind-steps {
@@ -1991,7 +2104,7 @@ onUnmounted(() => {
   margin-top: 2px;
   font-size: 14px;
   font-weight: 600;
-  color: #0b57d0;
+  color: var(--ds-brand-hover);
 }
 
 @media (max-width: 768px) {
@@ -2011,7 +2124,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4285f4, #9b72cb);
+  background: linear-gradient(135deg, #4285f4, #7b4fff);
   animation: typingBounce 1.4s ease-in-out infinite;
 }
 
@@ -2101,7 +2214,7 @@ onUnmounted(() => {
 }
 
 .att-download:hover {
-  color: #1a73e8;
+  color: var(--ds-brand);
 }
 
 /* 订单/商品卡片 */
@@ -2167,57 +2280,7 @@ onUnmounted(() => {
 }
 
 .pending-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--surface-color);
-  border-radius: 10px;
-  padding: 6px 10px;
-  max-width: 260px;
-  position: relative;
   animation: scaleIn 0.2s ease;
-}
-
-.pending-thumb {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  object-fit: cover;
-}
-
-.pending-file-icon {
-  color: var(--primary-color);
-}
-
-.pending-name {
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
-}
-
-.pending-size {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.pending-remove {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-secondary);
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-
-.pending-remove:hover {
-  background: rgba(0, 0, 0, 0.08);
-  color: #e53935;
 }
 
 /* Transition for attachments */
@@ -2346,7 +2409,7 @@ onUnmounted(() => {
 .send-btn {
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, #4285f4, #1a73e8);
+  background: linear-gradient(135deg, #4285f4, var(--ds-brand));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -2423,12 +2486,12 @@ onUnmounted(() => {
 
 .web-search-toggle.active {
   background: #e8f0fe;
-  color: #1a73e8;
+  color: var(--ds-brand);
   border-color: #d2e3fc;
 }
 
 .web-search-toggle.active n-icon {
-  color: #1a73e8;
+  color: var(--ds-brand);
 }
 
 .persona-icon {
@@ -2526,7 +2589,7 @@ onUnmounted(() => {
   border-radius: 12px;
   background: rgba(66, 133, 244, 0.06);
   border-left: 3px solid;
-  border-image: linear-gradient(180deg, #4285F4, #9B72CB) 1;
+  border-image: linear-gradient(180deg, #4285F4, #7b4fff) 1;
   overflow: hidden;
   transition: opacity 0.3s, max-height 0.4s ease;
 }
@@ -2668,7 +2731,7 @@ onUnmounted(() => {
   max-width: 280px;
 }
 .action-order-card:hover:not(.disabled) {
-  border-color: #7c4dff;
+  border-color: var(--ds-brand);
   background: linear-gradient(135deg, #f3efff 0%, #ede7ff 100%);
   box-shadow: 0 2px 12px rgba(124, 77, 255, 0.15);
   transform: translateY(-2px);
@@ -2701,11 +2764,11 @@ onUnmounted(() => {
 .action-order-amount {
   font-size: 14px;
   font-weight: 600;
-  color: #7c4dff;
+  color: var(--ds-brand);
 }
 .action-order-btn-label {
   font-size: 12px;
-  color: #7c4dff;
+  color: var(--ds-brand);
   font-weight: 500;
   text-align: center;
   margin-top: 4px;
@@ -2733,12 +2796,12 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 .action-btn.primary {
-  background: linear-gradient(135deg, #7c4dff 0%, #651fff 100%);
+  background: linear-gradient(135deg, var(--ds-brand) 0%, var(--ds-brand-hover) 100%);
   color: white;
   border-color: transparent;
 }
 .action-btn.primary:hover:not(.disabled) {
-  background: linear-gradient(135deg, #651fff 0%, #536dfe 100%);
+  background: linear-gradient(135deg, var(--ds-brand-hover) 0%, #536dfe 100%);
   box-shadow: 0 4px 16px rgba(124, 77, 255, 0.35);
 }
 .action-btn.default {
@@ -2767,7 +2830,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 4px dashed #7c4dff;
+  border: 4px dashed var(--ds-brand);
   border-radius: 16px;
 }
 
@@ -2776,56 +2839,65 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  color: #7c4dff;
+  color: var(--ds-brand);
   font-size: 20px;
   font-weight: 500;
   pointer-events: none;
 }
 
-/* ===== 消息快捷操作 ===== */
-.message-actions {
+.new-chat-btn-shift {
+  margin-left: -4px;
+}
+
+.sidebar-profile-item {
+  padding-left: 8px;
+}
+
+.sidebar-user-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.user-avatar-pill {
+  background: linear-gradient(135deg, #4e75ff, #7b4fff);
+  color: #fff;
+  font-weight: 700;
+}
+
+.message-content-wrapper-user {
   display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  margin-top: 4px;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
-.message-row:hover .message-actions {
-  opacity: 1;
-}
-
-@media (max-width: 768px) {
-  .message-actions {
-    opacity: 1; /* Always show on mobile */
-  }
-}
-
-.ai-actions {
-  justify-content: flex-start;
-  padding-left: 12px;
-}
-
-.user-actions {
-  justify-content: flex-end;
-  padding-right: 12px;
-}
-
-.msg-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  color: var(--text-tertiary);
+.stop-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #f29900, #ff7a59);
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.msg-action-btn:hover {
-  background-color: var(--bg-color);
-  color: #1a73e8;
+.stop-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(242, 153, 0, 0.35);
+}
+
+.rename-input-wrap {
+  margin-top: 16px;
+}
+
+.rename-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.rename-save-btn {
+  background: var(--ds-brand);
+  color: #fff;
 }
 
 /* ===== 回到底部按钮 ===== */
@@ -2851,8 +2923,9 @@ onUnmounted(() => {
 
 .scroll-bottom-btn:hover {
   background: #f8f9fa;
-  color: #1a73e8;
+  color: var(--ds-brand);
   transform: translateX(-50%) translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 }
 </style>
+

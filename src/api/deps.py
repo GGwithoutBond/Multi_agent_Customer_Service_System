@@ -54,6 +54,33 @@ async def require_current_user(
     return user_id
 
 
+async def require_admin_user(
+    user_id: UUID = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> UUID:
+    """
+    要求管理员身份 - 返回当前用户 ID
+
+    非管理员时抛出 403 异常。
+    """
+    from src.repositories.user_repo import UserRepository
+
+    repo = UserRepository(db)
+    user = await repo.get_by_id(user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未认证或认证已过期",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足，需要管理员角色",
+        )
+    return user_id
+
+
 def get_settings_dep() -> Settings:
     """获取配置依赖"""
     return get_settings()

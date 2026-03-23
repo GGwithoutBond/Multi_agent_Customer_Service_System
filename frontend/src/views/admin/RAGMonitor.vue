@@ -61,6 +61,7 @@ const summary = ref<RetrievalSummary>({
 
 const loading = ref(true)
 const logsLoading = ref(true)
+const descriptionLabelStyle = 'font-weight: 600; color: var(--ds-text-secondary);'
 
 // Score quality label
 const scoreQualityLabel = computed(() => {
@@ -78,7 +79,7 @@ const columns = [
     width: 150,
   },
   {
-    title: 'Query',
+    title: '查询内容',
     key: 'query',
     ellipsis: { tooltip: true },
   },
@@ -263,13 +264,13 @@ onMounted(() => {
             </div>
             <div v-else>
               <n-descriptions :column="1" bordered size="large" class="!bg-transparent *:!bg-transparent">
-                <n-descriptions-item label="集合名称" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="集合名称" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.vector_store.collection_name }}</span>
                 </n-descriptions-item>
-                <n-descriptions-item label="特征维度" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="特征维度" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.vector_store.dimension }}</span>
                 </n-descriptions-item>
-                <n-descriptions-item label="已索引向量数" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="已索引向量数" :label-style="descriptionLabelStyle">
                   <span class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">{{ status.vector_store.total_vectors.toLocaleString() }}</span>
                 </n-descriptions-item>
               </n-descriptions>
@@ -304,10 +305,10 @@ onMounted(() => {
             </div>
             <div v-else>
               <n-descriptions :column="1" bordered size="large" class="!bg-transparent *:!bg-transparent">
-                <n-descriptions-item label="实体节点 (Nodes)" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="实体节点 (Nodes)" :label-style="descriptionLabelStyle">
                   <span class="text-2xl font-extrabold text-purple-600 dark:text-purple-400 font-mono tracking-tight">{{ status.graph_store.total_nodes.toLocaleString() }}</span>
                 </n-descriptions-item>
-                <n-descriptions-item label="关联关系 (Edges)" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="关联关系 (Edges)" :label-style="descriptionLabelStyle">
                   <span class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono tracking-tight">{{ status.graph_store.total_relations.toLocaleString() }}</span>
                 </n-descriptions-item>
               </n-descriptions>
@@ -322,7 +323,7 @@ onMounted(() => {
       <div class="mb-6 flex justify-between items-center relative z-10">
         <div>
           <h3 class="text-xl font-bold text-slate-800 dark:text-white">检索质量流水</h3>
-          <p class="text-sm text-slate-400 mt-1">每一次 RAG 调用的「Query → 召回数量 → 相关度评分 → 耗时」全维度记录</p>
+          <p class="text-sm text-slate-400 mt-1">每一次 RAG 调用的「查询内容 → 召回数量 → 相关度评分 → 耗时」全维度记录</p>
         </div>
         <button
           @click="fetchLogs"

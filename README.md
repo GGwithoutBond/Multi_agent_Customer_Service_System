@@ -42,7 +42,7 @@
 2. **配置环境变量**
    ```bash
    cp .env.example .env
-   # 编辑 .env 文件，填入你的 OpenAI/Anthropic API Key
+   # 编辑 .env 文件，填入 API Key，并务必替换 SECRET_KEY（默认占位值会导致服务拒绝启动）
    ```
 
 3. **启动服务**

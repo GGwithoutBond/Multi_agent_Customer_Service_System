@@ -29,6 +29,28 @@ class ConversationRepository(BaseRepository[Conversation]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id_for_user(self, conversation_id: UUID, user_id: UUID) -> Optional[Conversation]:
+        """按会话 ID + 用户 ID 查询会话。"""
+        result = await self.session.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_with_messages_for_user(self, conversation_id: UUID, user_id: UUID) -> Optional[Conversation]:
+        """按会话 ID + 用户 ID 查询会话及其消息。"""
+        result = await self.session.execute(
+            select(Conversation)
+            .options(selectinload(Conversation.messages))
+            .where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def get_by_user(
         self,
         user_id: UUID,
@@ -59,3 +81,16 @@ class ConversationRepository(BaseRepository[Conversation]):
     async def close_conversation(self, conversation_id: UUID) -> Optional[Conversation]:
         """关闭会话"""
         return await self.update_by_id(conversation_id, status=ConversationStatus.CLOSED)
+
+    async def update_by_id_for_user(self, conversation_id: UUID, user_id: UUID, **kwargs) -> Optional[Conversation]:
+        """按会话归属更新会话。"""
+        await self.session.execute(
+            update(Conversation)
+            .where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user_id,
+            )
+            .values(**kwargs)
+        )
+        await self.session.flush()
+        return await self.get_by_id_for_user(conversation_id, user_id)

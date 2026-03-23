@@ -26,6 +26,7 @@ const status = ref<MiddlewareStatus>({
 })
 
 const loading = ref(true)
+const descriptionLabelStyle = 'font-weight: 600; color: var(--ds-text-secondary);'
 
 const fetchStatus = async () => {
   loading.value = true
@@ -92,13 +93,13 @@ onMounted(() => {
             
             <div v-else class="space-y-6">
               <n-descriptions :column="1" bordered size="large" class="!bg-transparent *:!bg-transparent">
-                <n-descriptions-item label="当前连接数" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="当前连接数" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.postgres.activeConnections }} / {{ status.postgres.maxConnections }}</span>
                 </n-descriptions-item>
-                <n-descriptions-item label="数据存储用量" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="数据存储用量" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.postgres.databaseSize }}</span>
                 </n-descriptions-item>
-                <n-descriptions-item label="QPS 状态" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="QPS 状态" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.postgres.queriesPerSecond }} /s</span>
                 </n-descriptions-item>
               </n-descriptions>
@@ -160,13 +161,13 @@ onMounted(() => {
             
             <div v-else class="space-y-6">
               <n-descriptions :column="1" bordered size="large" class="!bg-transparent *:!bg-transparent">
-                <n-descriptions-item label="活动连接" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="活动连接" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.redis.connections }}</span>
                 </n-descriptions-item>
-                <n-descriptions-item label="当前内存占用" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="当前内存占用" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.redis.memoryUsed }}</span>
                 </n-descriptions-item>
-                <n-descriptions-item label="连续运行天数" label-style="font-weight: 600; color: #64748b;">
+                <n-descriptions-item label="连续运行天数" :label-style="descriptionLabelStyle">
                   <span class="text-lg font-medium text-slate-800 dark:text-slate-200">{{ status.redis.uptime }}</span>
                 </n-descriptions-item>
               </n-descriptions>

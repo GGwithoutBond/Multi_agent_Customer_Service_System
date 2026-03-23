@@ -4,6 +4,7 @@
 优化: 真正逐 Token 流式输出、用户画像自动更新、可观测性日志
 """
 
+import asyncio
 import re
 import time
 from typing import Any, AsyncIterator, List, Optional
@@ -14,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agents.graph.nodes import _orchestrator
 from src.agents.graph.workflow import get_workflow
+from src.agents.quality_agent import QualityAgent
+from src.agents.summary_agent import SummaryAgent
 from src.core.config import get_settings
 from src.core.exceptions import AgentError
 from src.core.logging import get_logger
@@ -43,6 +46,7 @@ class ChatService:
         self.msg_repo = MessageRepository(db)
         self.memory_manager = MemoryManager(db_session=db)
         self.semantic_cache = SemanticCache()
+        self.summary_agent = SummaryAgent()
 
     async def process_message(
         self,
@@ -86,6 +90,8 @@ class ChatService:
             response_text = None
             intent = "cache_hit"
             worker_type = "cache"
+            detected_sentiment = None
+            detected_urgency = None
             settings = get_settings()
             if not attachments and settings.ENABLE_SEMANTIC_CACHE:
                 cached_res = await self.semantic_cache.get(message)
@@ -109,6 +115,8 @@ class ChatService:
                 response_text = result.get("response", "抱歉，我暂时无法回答您的问题。")
                 intent = result.get("intent")
                 worker_type = result.get("worker_type")
+                detected_sentiment = result.get("sentiment")
+                detected_urgency = result.get("urgency")
                 
                 # 写入缓存
                 if not attachments and settings.ENABLE_SEMANTIC_CACHE and result.get("quality_score", 5) >= 3:
@@ -121,8 +129,8 @@ class ChatService:
             self._log_metrics(
                 intent=intent,
                 worker_type=worker_type,
-                sentiment=result.get("sentiment"),
-                urgency=result.get("urgency"),
+                sentiment=detected_sentiment,
+                urgency=detected_urgency,
                 latency_ms=latency_ms,
                 tokens_used=tokens_used,
             )
@@ -195,6 +203,9 @@ class ChatService:
             conversation_id, user_id
         )
 
+        # 首包固定发送 meta，前端据此绑定 conversation_id
+        yield ChatStreamChunk(type="meta", conversation_id=conversation.id)
+
         # 保存用户消息（含附件元信息）
         msg_metadata = {}
         if attachments:
@@ -240,8 +251,23 @@ class ChatService:
                         latency_ms=int((time.time() - start_time) * 1000),
                     )
                     ai_msg = await self.msg_repo.create(ai_msg)
-                    await self.memory_manager.save_turn(str(conversation.id), message, cached_res, user_id=str(user_id) if user_id else None)
                     yield ChatStreamChunk(type="done", message_id=ai_msg.id)
+                    if settings.ENABLE_ASYNC_POSTPROCESS:
+                        asyncio.create_task(
+                            self._run_stream_postprocess(
+                                conversation_id=conversation.id,
+                                user_message=message,
+                                assistant_message=cached_res,
+                                user_id=user_id,
+                            )
+                        )
+                    else:
+                        await self._run_stream_postprocess(
+                            conversation_id=conversation.id,
+                            user_message=message,
+                            assistant_message=cached_res,
+                            user_id=user_id,
+                        )
                     return
 
             # 执行工作流
@@ -384,13 +410,37 @@ class ChatService:
             )
             ai_msg = await self.msg_repo.create(ai_msg)
 
-            # 更新记忆（含用户画像自动提取）
-            await self.memory_manager.save_turn(
-                str(conversation.id), message, full_response,
-                user_id=str(user_id) if user_id else None,
-            )
+            review_state = {
+                "intent": detected_intent,
+                "worker_type": detected_worker_type,
+                "sentiment": detected_sentiment,
+                "urgency": detected_urgency,
+                "conversation_id": str(conversation.id),
+                "user_input": message,
+                "worker_result": full_response,
+            }
+            if QualityAgent.should_run_sync_review(review_state):
+                await self._run_async_quality_review(review_state)
+            elif QualityAgent.should_run_async_review(review_state):
+                asyncio.create_task(self._run_async_quality_review(review_state))
 
             yield ChatStreamChunk(type="done", message_id=ai_msg.id)
+            if settings.ENABLE_ASYNC_POSTPROCESS:
+                asyncio.create_task(
+                    self._run_stream_postprocess(
+                        conversation_id=conversation.id,
+                        user_message=message,
+                        assistant_message=full_response,
+                        user_id=user_id,
+                    )
+                )
+            else:
+                await self._run_stream_postprocess(
+                    conversation_id=conversation.id,
+                    user_message=message,
+                    assistant_message=full_response,
+                    user_id=user_id,
+                )
 
         except Exception as e:
             logger.error("流式消息处理失败: %s", e)
@@ -495,6 +545,78 @@ class ChatService:
             "urgency": None,
             "working_memory": None,
         }
+
+    async def _run_stream_postprocess(
+        self,
+        conversation_id: UUID,
+        user_message: str,
+        assistant_message: str,
+        user_id: Optional[UUID],
+    ) -> None:
+        """流式 done 后置处理：写入记忆，避免阻塞首屏响应。"""
+        try:
+            await self.memory_manager.save_turn(
+                conversation_id=str(conversation_id),
+                user_message=user_message,
+                assistant_message=assistant_message,
+                user_id=str(user_id) if user_id else None,
+            )
+        except Exception as exc:
+            logger.warning("流式后处理失败: %s", exc)
+
+    async def _run_async_quality_review(self, state: dict[str, Any]) -> None:
+        """执行质量审查（同步或异步调度均复用该协程）。"""
+        try:
+            agent = QualityAgent()
+            await agent.process(state)
+        except Exception as exc:
+            logger.warning("异步质量审查失败: %s", exc)
+
+    async def _finalize_first_turn_summary(
+        self,
+        conversation: Conversation,
+        user_message: str,
+        assistant_message: str,
+    ) -> None:
+        """
+        首轮完成后生成标题/摘要。
+        仅在会话消息数为 2（用户+助手各一条）时执行，避免后续轮次覆盖上下文。
+        """
+        try:
+            msg_count = await self.msg_repo.count_by_conversation(conversation.id)
+            if msg_count != 2:
+                return
+
+            latest_conv = await self.conv_repo.get_by_id(conversation.id)
+            if not latest_conv:
+                return
+
+            summary_payload = await self.summary_agent.process(
+                {
+                    "user_message": user_message,
+                    "assistant_message": assistant_message,
+                }
+            )
+
+            update_data: dict[str, Any] = {}
+            proposed_title = str(summary_payload.get("title") or "").strip()
+            if not getattr(latest_conv, "title", None) and proposed_title:
+                update_data["title"] = proposed_title
+
+            summary_text = str(summary_payload.get("summary") or "").strip()
+            if summary_text:
+                update_data["summary"] = summary_text
+
+            key_points = summary_payload.get("key_points") or []
+            if key_points:
+                metadata = dict(getattr(latest_conv, "metadata_", None) or {})
+                metadata["summary_key_points"] = key_points
+                update_data["metadata_"] = metadata
+
+            if update_data:
+                await self.conv_repo.update_by_id(conversation.id, **update_data)
+        except Exception as exc:
+            logger.warning("首轮摘要生成失败: %s", exc)
 
     @staticmethod
     def _log_metrics(

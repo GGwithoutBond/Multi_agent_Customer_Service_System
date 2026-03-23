@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.deps import require_current_user
+from src.api.deps import require_admin_user, require_current_user
 from src.core.config import get_settings
 from src.database.session import get_db_session
 from src.schemas.common import HealthCheckResponse, ResponseWithData
@@ -131,7 +131,8 @@ async def get_current_user(
 
 @router.get("/admin/dashboard/metrics")
 async def get_dashboard_metrics(
-    db: AsyncSession = Depends(get_db_session)
+    _admin_user_id: UUID = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """获取后台看板核心指标 (Real Data)"""
     from sqlalchemy import select, func
@@ -168,7 +169,8 @@ async def get_dashboard_metrics(
 
 @router.get("/admin/models/logs")
 async def get_model_logs(
-    db: AsyncSession = Depends(get_db_session)
+    _admin_user_id: UUID = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """获取大模型调用流水日志 (Real Data)"""
     from sqlalchemy import select
@@ -200,7 +202,8 @@ async def get_model_logs(
 
 @router.get("/admin/middleware/status")
 async def get_middleware_status(
-    db: AsyncSession = Depends(get_db_session)
+    _admin_user_id: UUID = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """获取中间件详细状态监控 (Real Data)"""
     from sqlalchemy import text
@@ -251,7 +254,9 @@ async def get_middleware_status(
 
 
 @router.get("/admin/rag/status")
-async def get_rag_status():
+async def get_rag_status(
+    _admin_user_id: UUID = Depends(require_admin_user),
+):
     """获取 RAG 知识库与图谱检索服务的状态及指标 (Real Data)"""
     from src.rag.vector_store import VectorStore
     from src.rag.graph_store import GraphStore
@@ -298,7 +303,9 @@ async def get_rag_status():
 
 
 @router.get("/admin/rag/retrieval-logs")
-async def get_rag_retrieval_logs():
+async def get_rag_retrieval_logs(
+    _admin_user_id: UUID = Depends(require_admin_user),
+):
     """获取 RAG 检索质量指标日志（最近 200 条）"""
     from src.rag.retriever import get_retrieval_logs
 

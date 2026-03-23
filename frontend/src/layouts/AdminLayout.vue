@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, ref } from 'vue'
+import { h, ref, watch } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import {
   NLayout,
@@ -15,9 +15,11 @@ import {
   LibraryOutline,
   LogOutOutline
 } from '@vicons/ionicons5'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 
 const collapsed = ref(false)
 
@@ -65,6 +67,14 @@ const menuOptions = [
 ]
 
 const activeKey = ref<string>((route.name as string) || 'admin-dashboard')
+watch(
+  () => route.name,
+  (name) => {
+    if (typeof name === 'string') {
+      activeKey.value = name
+    }
+  },
+)
 
 const handleMenuUpdate = (key: string) => {
   activeKey.value = key
@@ -74,16 +84,19 @@ const handleMenuUpdate = (key: string) => {
     router.push('/admin/models')
   } else if (key === 'admin-middleware') {
     router.push('/admin/middleware')
+  } else if (key === 'admin-rag') {
+    router.push('/admin/rag')
   }
 }
 
 const handleLogout = () => {
-  router.push('/')
+  userStore.logout()
+  router.push('/login')
 }
 </script>
 
 <template>
-  <div class="h-screen w-full bg-[#f8fafc] dark:bg-[#0f172a] text-slate-800 dark:text-slate-100 flex overflow-hidden selection:bg-blue-500/30">
+  <div class="admin-shell h-screen w-full flex overflow-hidden">
     <!-- 侧边栏 -->
     <n-layout-sider
       bordered
@@ -94,15 +107,15 @@ const handleLogout = () => {
       show-trigger="bar"
       @collapse="collapsed = true"
       @expand="collapsed = false"
-      class="h-full bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-800/60 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20"
+      class="h-full admin-sider z-20"
     >
       <div class="flex items-center justify-center py-8 border-b border-transparent">
         <div class="flex items-center space-x-3 transition-all duration-300">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 hover:from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white font-bold text-xl cursor-pointer hover:rotate-6 transition-transform">
+          <div class="admin-logo-badge">
             <span class="drop-shadow-sm">A</span>
           </div>
-          <h1 v-if="!collapsed" class="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
-            Agent Admin
+          <h1 v-if="!collapsed" class="admin-logo-text">
+            客服控制台
           </h1>
         </div>
       </div>
@@ -120,15 +133,12 @@ const handleLogout = () => {
 
     <n-layout class="bg-transparent flex-1 h-full flex flex-col relative isolate">
       <!-- 顶部通知/导航栏 -->
-      <header class="sticky top-0 z-50 h-20 shrink-0 flex items-center justify-between px-8 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm">
+      <header class="admin-header sticky top-0 z-50 h-20 shrink-0 flex items-center justify-between px-8 shadow-sm">
         <div class="flex items-center space-x-4">
-          <span class="text-slate-800 dark:text-slate-200 font-semibold tracking-wide text-lg drop-shadow-sm">智能体客服看板</span>
+          <span class="admin-title font-semibold tracking-wide text-lg drop-shadow-sm">智能体客服看板</span>
         </div>
         <div class="flex items-center space-x-4">
-          <div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 cursor-pointer hover:bg-slate-200 transition-colors">
-            <!-- 占位符，例如日间/夜间模式切换 -->
-          </div>
-          <n-button quaternary circle @click="handleLogout" class="hover:bg-red-50 hover:text-red-500 transition-all">
+          <n-button quaternary circle @click="handleLogout" class="hover:bg-red-50 hover:text-red-500 transition-all" title="退出登录">
             <template #icon>
               <n-icon size="20"><LogOutOutline /></n-icon>
             </template>
@@ -137,7 +147,7 @@ const handleLogout = () => {
       </header>
 
       <!-- 主要内容区域 -->
-      <main class="relative z-0 flex-1 min-h-0 p-8 overflow-y-auto w-full max-w-[1600px] mx-auto nice-scrollbar">
+      <main class="relative z-0 flex-1 min-h-0 p-8 overflow-y-auto w-full max-w-[1600px] mx-auto nice-scrollbar ds-scrollbar">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -149,6 +159,55 @@ const handleLogout = () => {
 </template>
 
 <style>
+.admin-shell {
+  background: radial-gradient(circle at top left, #e9efff 0%, var(--ds-bg-page) 45%);
+  color: var(--ds-text-primary);
+}
+
+.admin-sider {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(14px);
+  border-right: 1px solid var(--ds-border);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.03);
+}
+
+.admin-logo-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 20px;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--ds-brand), #7b4fff);
+  box-shadow: 0 10px 18px rgba(44, 107, 255, 0.28);
+  transition: transform var(--ds-duration-fast) ease;
+}
+
+.admin-logo-badge:hover {
+  transform: rotate(6deg);
+}
+
+.admin-logo-text {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ds-text-primary);
+}
+
+.admin-header {
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--ds-border);
+}
+
+.admin-title {
+  color: var(--ds-text-primary);
+}
+
 /* 覆盖 NaiveUI 的背景 */
 .n-layout-sider, .n-layout, .n-menu {
   background-color: transparent !important;

@@ -1,21 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-// @ts-ignore
-import LoginPage from '@/views/LoginPage.vue'
-// @ts-ignore
-import Chat from '@/views/Chat.vue'
-// @ts-ignore
-import Search from '@/views/Search.vue'
-// @ts-ignore
-import AdminLayout from '@/layouts/AdminLayout.vue'
-// @ts-ignore
-import Dashboard from '@/views/admin/Dashboard.vue'
-// @ts-ignore
-import ModelMonitor from '@/views/admin/ModelMonitor.vue'
-// @ts-ignore
-import MiddlewareMonitor from '@/views/admin/MiddlewareMonitor.vue'
-// @ts-ignore
-import RAGMonitor from '@/views/admin/RAGMonitor.vue'
+
+const LoginPage = () => import('@/views/LoginPage.vue')
+const Chat = () => import('@/views/Chat.vue')
+const Search = () => import('@/views/Search.vue')
+const AdminLayout = () => import('@/layouts/AdminLayout.vue')
+const Dashboard = () => import('@/views/admin/Dashboard.vue')
+const ModelMonitor = () => import('@/views/admin/ModelMonitor.vue')
+const MiddlewareMonitor = () => import('@/views/admin/MiddlewareMonitor.vue')
+const RAGMonitor = () => import('@/views/admin/RAGMonitor.vue')
 
 const router = createRouter({
     history: createWebHistory((import.meta as any).env.BASE_URL),

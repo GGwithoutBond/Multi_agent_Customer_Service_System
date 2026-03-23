@@ -48,9 +48,23 @@ class ConversationService:
             raise NotFoundError("会话", str(conversation_id))
         return conv
 
+    async def get_conversation_for_user(self, conversation_id: UUID, user_id: UUID) -> Conversation:
+        """获取当前用户拥有的会话详情。"""
+        conv = await self.conv_repo.get_by_id_for_user(conversation_id, user_id)
+        if not conv:
+            raise NotFoundError("会话", str(conversation_id))
+        return conv
+
     async def get_conversation_with_messages(self, conversation_id: UUID) -> Conversation:
         """获取会话及其消息"""
         conv = await self.conv_repo.get_with_messages(conversation_id)
+        if not conv:
+            raise NotFoundError("会话", str(conversation_id))
+        return conv
+
+    async def get_conversation_with_messages_for_user(self, conversation_id: UUID, user_id: UUID) -> Conversation:
+        """获取当前用户拥有的会话及其消息。"""
+        conv = await self.conv_repo.get_with_messages_for_user(conversation_id, user_id)
         if not conv:
             raise NotFoundError("会话", str(conversation_id))
         return conv
@@ -90,6 +104,28 @@ class ConversationService:
         if deleted:
             logger.info("会话已删除: %s", conversation_id)
         return deleted
+
+    async def delete_conversation_for_user(self, conversation_id: UUID, user_id: UUID) -> bool:
+        """删除当前用户拥有的会话。"""
+        conv = await self.conv_repo.get_by_id_for_user(conversation_id, user_id)
+        if not conv:
+            raise NotFoundError("会话", str(conversation_id))
+        deleted = await self.conv_repo.delete_by_id(conversation_id)
+        if deleted:
+            logger.info("会话已删除: %s user=%s", conversation_id, user_id)
+        return deleted
+
+    async def update_conversation_for_user(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+        **update_data,
+    ) -> Conversation:
+        """更新当前用户拥有的会话。"""
+        conv = await self.conv_repo.update_by_id_for_user(conversation_id, user_id, **update_data)
+        if not conv:
+            raise NotFoundError("会话", str(conversation_id))
+        return conv
 
     async def get_message_count(self, conversation_id: UUID) -> int:
         """获取会话的消息数"""

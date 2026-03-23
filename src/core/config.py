@@ -6,7 +6,7 @@
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     PORT: int = 8000
     ALLOWED_ORIGINS: list[str] = ["*"]
     API_RATE_LIMIT: int = 60  # 每分钟请求数
+    UPLOAD_RATE_LIMIT_PER_MINUTE: int = 20
+    WS_CONNECT_RATE_LIMIT_PER_MINUTE: int = 12
+    WS_MESSAGE_RATE_LIMIT_PER_MINUTE: int = 120
 
     # ── 安全配置 ──
     SECRET_KEY: str = "your-secret-key-change-in-production"
@@ -152,6 +155,41 @@ class Settings(BaseSettings):
 
     # ── 缓存配置 ──
     ENABLE_SEMANTIC_CACHE: bool = Field(default=False, description="是否开启对话语义缓存")
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug_flag(cls, value):
+        """健壮解析 DEBUG，防止异常字符串导致启动失败。"""
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off", ""}:
+                return False
+            return False
+        return False
+
+    @model_validator(mode="after")
+    def validate_secret_key_security(self):
+        """禁止使用默认/空 SECRET_KEY。"""
+        secret = (self.SECRET_KEY or "").strip()
+        insecure_defaults = {
+            "your-secret-key-change-in-production",
+            "default-secret-key",
+            "changeme",
+            "change-me",
+        }
+        if not secret:
+            raise ValueError("SECRET_KEY 不能为空，请在环境变量中设置强随机密钥。")
+        if secret in insecure_defaults:
+            raise ValueError("SECRET_KEY 不能使用默认占位值，请更换为强随机密钥。")
+        return self
 
 @lru_cache()
 def get_settings() -> Settings:
