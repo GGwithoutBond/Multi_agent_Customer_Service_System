@@ -17,7 +17,7 @@ export function getMessagesHistory(conversationId: string, beforeId?: string, li
   })
 }
 
-export function uploadFile(file: File) {
+export function uploadFile(file: File, onProgress?: (percent: number) => void) {
   const formData = new FormData()
   formData.append('file', file)
   return request({
@@ -26,7 +26,12 @@ export function uploadFile(file: File) {
     data: formData,
     headers: {
       'Content-Type': 'multipart/form-data'
-    }
+    },
+    onUploadProgress: (event: any) => {
+      if (!event.total || !onProgress) return
+      const percent = Math.round((event.loaded / event.total) * 100)
+      onProgress(Math.min(100, Math.max(0, percent)))
+    },
   })
 }
 

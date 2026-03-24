@@ -293,8 +293,11 @@ const showStreamRecovery = computed(
 
 const isSidebarOpen = ref(window.innerWidth > 768)
 const conversations = ref<any[]>([])
+const conversationSearchQuery = ref('')
 const batchMode = ref(false)
 const selectedConversationIds = ref<string[]>([])
+const justToggledConversationId = ref<string | null>(null)
+let togglePulseTimer: number | null = null
 const historyHasMore = ref(false)
 const historyCursor = ref<string | null>(null)
 const historyLoading = ref(false)
@@ -367,6 +370,16 @@ const toggleBatchMode = () => {
   }
 }
 
+const markConversationTogglePulse = (id: string) => {
+  justToggledConversationId.value = id
+  if (togglePulseTimer) {
+    clearTimeout(togglePulseTimer)
+  }
+  togglePulseTimer = window.setTimeout(() => {
+    justToggledConversationId.value = null
+  }, 280)
+}
+
 const toggleConversationSelect = (id: string) => {
   if (!batchMode.value) return
   if (selectedConversationIds.value.includes(id)) {
@@ -374,7 +387,90 @@ const toggleConversationSelect = (id: string) => {
   } else {
     selectedConversationIds.value.push(id)
   }
+  markConversationTogglePulse(id)
 }
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const highlightConversationTitle = (title: string) => {
+  const rawTitle = title || '新会话'
+  const keyword = conversationSearchQuery.value.trim()
+  if (!keyword) return escapeHtml(rawTitle)
+
+  const regex = new RegExp(escapeRegExp(keyword), 'ig')
+  let start = 0
+  let output = ''
+  let matched = false
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(rawTitle)) !== null) {
+    matched = true
+    const index = match.index
+    output += escapeHtml(rawTitle.slice(start, index))
+    output += `<mark class="history-highlight">${escapeHtml(match[0])}</mark>`
+    start = index + match[0].length
+  }
+
+  if (!matched) return escapeHtml(rawTitle)
+  output += escapeHtml(rawTitle.slice(start))
+  return output
+}
+
+const getDateBucket = (value?: string) => {
+  if (!value) return 'older'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'older'
+
+  const now = new Date()
+  const nowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const targetStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.floor((nowStart.getTime() - targetStart.getTime()) / 86400000)
+
+  if (diffDays <= 0) return 'today'
+  if (diffDays <= 7) return 'week'
+  return 'older'
+}
+
+const groupedConversations = computed(() => {
+  const keyword = conversationSearchQuery.value.trim().toLowerCase()
+  const filtered = conversations.value.filter((item) => {
+    if (!keyword) return true
+    return String(item.title || '新会话').toLowerCase().includes(keyword)
+  })
+
+  const groups = {
+    pinned: [] as any[],
+    today: [] as any[],
+    week: [] as any[],
+    older: [] as any[],
+  }
+
+  filtered.forEach((item) => {
+    if (item.is_pinned) {
+      groups.pinned.push(item)
+      return
+    }
+    const bucket = getDateBucket(item.updated_at || item.created_at)
+    if (bucket === 'today') groups.today.push(item)
+    else if (bucket === 'week') groups.week.push(item)
+    else groups.older.push(item)
+  })
+
+  return [
+    { key: 'pinned', label: '置顶会话', items: groups.pinned },
+    { key: 'today', label: '今天', items: groups.today },
+    { key: 'week', label: '最近 7 天', items: groups.week },
+    { key: 'older', label: '更早', items: groups.older },
+  ].filter(group => group.items.length > 0)
+})
 
 const handleBatchDelete = async () => {
   if (selectedConversationIds.value.length === 0) {
@@ -488,6 +584,15 @@ interface AttachmentItem {
   image?: string
 }
 
+interface UploadQueueItem {
+  id: string
+  file: File
+  name: string
+  progress: number
+  status: 'uploading' | 'success' | 'error'
+  error?: string
+}
+
 interface OrderOption {
   order_id: string
   name: string
@@ -505,6 +610,7 @@ interface ProductOption {
 }
 
 const pendingAttachments = ref<AttachmentItem[]>([])
+const uploadQueue = ref<UploadQueueItem[]>([])
 const imageInputRef = ref<HTMLInputElement>()
 const fileInputRef = ref<HTMLInputElement>()
 const uploading = ref(false)
@@ -607,10 +713,54 @@ const onFileChange = async (e: Event) => {
   target.value = ''
 }
 
+const createUploadQueueItem = (file: File): UploadQueueItem => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  file,
+  name: file.name,
+  progress: 0,
+  status: 'uploading',
+})
+
+const upsertUploadQueueItem = (item: UploadQueueItem) => {
+  const index = uploadQueue.value.findIndex(entry => entry.id === item.id)
+  if (index === -1) {
+    uploadQueue.value.push(item)
+  } else {
+    uploadQueue.value[index] = item
+  }
+}
+
+const removeUploadQueueItem = (id: string) => {
+  uploadQueue.value = uploadQueue.value.filter(item => item.id !== id)
+}
+
+const retryUpload = async (id: string) => {
+  const target = uploadQueue.value.find(item => item.id === id)
+  if (!target || target.status !== 'error') return
+  target.status = 'uploading'
+  target.progress = 0
+  target.error = ''
+  await doUploadInternal(target.file, target.id)
+}
+
+const clearFinishedUploads = () => {
+  uploadQueue.value = uploadQueue.value.filter(item => item.status !== 'success')
+}
+
 const doUpload = async (file: File) => {
+  const queueItem = createUploadQueueItem(file)
+  upsertUploadQueueItem(queueItem)
+  await doUploadInternal(file, queueItem.id)
+}
+
+const doUploadInternal = async (file: File, queueItemId: string) => {
   uploading.value = true
   try {
-    const res: any = await uploadFile(file)
+    const res: any = await uploadFile(file, (percent) => {
+      const target = uploadQueue.value.find(item => item.id === queueItemId)
+      if (!target) return
+      target.progress = percent
+    })
     const data = res.data || res
     pendingAttachments.value.push({
       type: data.type === 'image' ? 'image' : 'file',
@@ -618,10 +768,25 @@ const doUpload = async (file: File) => {
       name: data.name || file.name,
       size: data.size || file.size,
     })
+    const target = uploadQueue.value.find(item => item.id === queueItemId)
+    if (target) {
+      target.progress = 100
+      target.status = 'success'
+      target.error = ''
+    }
     message.success(`${file.name} 上传成功`)
+    window.setTimeout(() => {
+      clearFinishedUploads()
+    }, 900)
   } catch (err) {
     console.error(err)
-    message.error(`${file.name} 上传失败`)
+    const detail = (err as any)?.response?.data?.detail || (err as any)?.message || '上传失败'
+    const target = uploadQueue.value.find(item => item.id === queueItemId)
+    if (target) {
+      target.status = 'error'
+      target.error = String(detail)
+    }
+    message.error(`${file.name} 上传失败：${detail}`)
   } finally {
     uploading.value = false
   }
@@ -1275,6 +1440,10 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('offline', onNetworkOffline)
   window.removeEventListener('online', onNetworkOnline)
+  if (togglePulseTimer) {
+    clearTimeout(togglePulseTimer)
+    togglePulseTimer = null
+  }
   if (resizeObserver) resizeObserver.disconnect()
 })
 </script>
@@ -1324,34 +1493,59 @@ onUnmounted(() => {
         
         <!-- Scrollable Section -->
         <div class="chat-history-container ds-scrollbar">
-          <div class="chat-history-list">
-            <div
-              v-for="convo in conversations"
-              :key="convo.id"
-              class="history-item"
-              :class="{ active: convo.id === conversationId }"
-              @click="batchMode ? toggleConversationSelect(convo.id) : handleSelectChat(convo.id)"
+          <div class="history-search-wrap">
+            <n-input
+              v-model:value="conversationSearchQuery"
+              size="small"
+              clearable
+              placeholder="搜索会话标题"
+              class="history-search-input"
             >
-              <n-checkbox
-                v-if="batchMode"
-                :checked="selectedConversationIds.includes(convo.id)"
-                @update:checked="() => toggleConversationSelect(convo.id)"
-                @click.stop
-              />
-              <n-icon v-if="convo.is_pinned" :size="14" class="history-pin">
-                <PinOutline />
-              </n-icon>
-              <span class="history-title">{{ convo.title || '新会话' }}</span>
-              <n-dropdown 
-                :options="chatOptions" 
-                placement="bottom-end"
-                trigger="click"
-                @select="(key: string) => handleChatOption(key, convo.id)"
-              >
-                <div class="history-more-btn" @click.stop>
-                  <n-icon :size="16"><EllipsisVertical /></n-icon>
+              <template #prefix>
+                <n-icon :size="14"><SearchOutline /></n-icon>
+              </template>
+            </n-input>
+          </div>
+          <div class="chat-history-list">
+            <template v-if="groupedConversations.length > 0">
+              <div v-for="group in groupedConversations" :key="group.key" class="history-group">
+                <div class="history-group-title">{{ group.label }}</div>
+                <div
+                  v-for="convo in group.items"
+                  :key="convo.id"
+                  class="history-item"
+                  :class="{
+                    active: convo.id === conversationId,
+                    selected: selectedConversationIds.includes(convo.id),
+                    pulse: justToggledConversationId === convo.id
+                  }"
+                  @click="batchMode ? toggleConversationSelect(convo.id) : handleSelectChat(convo.id)"
+                >
+                  <n-checkbox
+                    v-if="batchMode"
+                    :checked="selectedConversationIds.includes(convo.id)"
+                    @update:checked="() => toggleConversationSelect(convo.id)"
+                    @click.stop
+                  />
+                  <n-icon v-if="convo.is_pinned" :size="14" class="history-pin">
+                    <PinOutline />
+                  </n-icon>
+                  <span class="history-title" v-html="highlightConversationTitle(convo.title || '新会话')"></span>
+                  <n-dropdown 
+                    :options="chatOptions" 
+                    placement="bottom-end"
+                    trigger="click"
+                    @select="(key: string) => handleChatOption(key, convo.id)"
+                  >
+                    <div class="history-more-btn" @click.stop>
+                      <n-icon :size="16"><EllipsisVertical /></n-icon>
+                    </div>
+                  </n-dropdown>
                 </div>
-              </n-dropdown>
+              </div>
+            </template>
+            <div v-else class="history-empty-state">
+              <span>没有匹配的会话</span>
             </div>
           </div>
           <div v-if="batchMode" class="batch-action-bar">
@@ -1457,7 +1651,10 @@ onUnmounted(() => {
                   <span></span><span></span><span></span>
                 </div>
                 <!-- Message content -->
-                <div v-if="msg.content && msg.loading" class="message-content streaming-content">{{ msg.content }}</div>
+                <div v-if="msg.content && msg.loading" class="message-content streaming-content">
+                  <span>{{ msg.content }}</span>
+                  <span class="stream-caret" aria-hidden="true"></span>
+                </div>
                 <div v-else-if="msg.content && msg.structuredBlocks && msg.structuredBlocks.length > 0" class="structured-response">
                   <div
                     v-for="(block, bi) in msg.structuredBlocks"
@@ -1578,6 +1775,34 @@ onUnmounted(() => {
 
     <!-- 输入区域 -->
     <div class="input-area">
+      <Transition name="slide-up">
+        <div v-if="uploadQueue.length > 0" class="upload-queue">
+          <div
+            v-for="item in uploadQueue"
+            :key="item.id"
+            class="upload-item"
+            :class="`status-${item.status}`"
+          >
+            <div class="upload-item-top">
+              <span class="upload-item-name">{{ item.name }}</span>
+              <span class="upload-item-meta">
+                <template v-if="item.status === 'uploading'">{{ item.progress }}%</template>
+                <template v-else-if="item.status === 'success'">已完成</template>
+                <template v-else>上传失败</template>
+              </span>
+            </div>
+            <div class="upload-progress-track">
+              <div class="upload-progress-fill" :style="{ width: `${item.progress}%` }"></div>
+            </div>
+            <div v-if="item.status === 'error'" class="upload-error-row">
+              <span class="upload-error-msg">{{ item.error || '请重试' }}</span>
+              <button type="button" class="upload-retry-btn" @click="retryUpload(item.id)">重试</button>
+              <button type="button" class="upload-remove-btn" @click="removeUploadQueueItem(item.id)">移除</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
       <!-- 待发送附件预览 -->
       <Transition name="slide-up">
         <div v-if="pendingAttachments.length > 0" class="pending-attachments">
@@ -1614,10 +1839,10 @@ onUnmounted(() => {
           v-model:value="inputValue"
           type="textarea"
           :autosize="{ minRows: 1, maxRows: 6 }"
-          placeholder="请输入你的问题"
+          placeholder="请输入你的问题（Enter 发送，Shift + Enter 换行）"
           :bordered="false"
           class="chat-input"
-          @keydown.enter.exact.prevent="handleSend"
+          @keydown.enter.exact.prevent="handleSend()"
         />
         
         <div class="input-actions">
@@ -1637,7 +1862,7 @@ onUnmounted(() => {
               v-if="!sending && (inputValue || pendingAttachments.length > 0)"
               class="send-btn"
               :class="{ sending: sending }"
-              @click="handleSend"
+              @click="handleSend()"
             >
               <n-icon :size="18" v-if="!sending"><SendOutline /></n-icon>
               <div v-else class="send-spinner"></div>
@@ -1645,6 +1870,7 @@ onUnmounted(() => {
           </Transition>
         </div>
       </div>
+      <div class="shortcut-hint">快捷键：Enter 发送，Shift + Enter 换行</div>
       <!-- Options Toggles -->
       <div class="input-extras">
         <!-- Web Search Toggle -->
@@ -1836,6 +2062,8 @@ onUnmounted(() => {
 /* Make headers fade out when collapsed */
 .sidebar-wrapper.is-collapsed .sidebar-menu-header,
 .sidebar-wrapper.is-collapsed .history-item,
+.sidebar-wrapper.is-collapsed .history-group-title,
+.sidebar-wrapper.is-collapsed .history-search-wrap,
 .sidebar-wrapper.is-collapsed .sidebar-menu-item span,
 .sidebar-wrapper.is-collapsed .new-chat-btn span {
   display: none;
@@ -1944,6 +2172,38 @@ onUnmounted(() => {
   border-radius: 10px;
 }
 
+.history-search-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 4px 2px 10px;
+  background: linear-gradient(180deg, var(--bg-color) 70%, rgba(244, 247, 255, 0));
+}
+
+.history-search-input :deep(.n-input__input-el) {
+  font-size: 12px;
+}
+
+.history-group {
+  margin-bottom: 6px;
+}
+
+.history-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 8px 12px 4px;
+}
+
+.history-empty-state {
+  padding: 20px 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
 /* Sidebar Buttons */
 .new-chat-btn {
   background-color: var(--surface-hover);
@@ -2023,6 +2283,14 @@ onUnmounted(() => {
   flex: 1;
 }
 
+.history-title :deep(mark),
+.history-title mark.history-highlight {
+  background: rgba(44, 107, 255, 0.16);
+  color: var(--ds-brand-hover);
+  border-radius: 6px;
+  padding: 0 3px;
+}
+
 .history-more-btn {
   display: flex;
   align-items: center;
@@ -2051,6 +2319,20 @@ onUnmounted(() => {
   background-color: var(--active-bg);
   color: var(--active-text);
   font-weight: 500;
+}
+
+.history-item.selected {
+  background-color: #e8efff;
+}
+
+.history-item.pulse {
+  animation: historyPulse 0.26s var(--ds-ease-standard);
+}
+
+@keyframes historyPulse {
+  0% { transform: scale(1); }
+  55% { transform: scale(1.02); }
+  100% { transform: scale(1); }
 }
 
 .sidebar-bottom {
@@ -2278,6 +2560,22 @@ onUnmounted(() => {
   border: 1px solid #e7eefc;
   border-radius: 14px;
   padding: 12px 14px;
+}
+
+.stream-caret {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  margin-left: 2px;
+  border-radius: 2px;
+  background: var(--ds-brand);
+  vertical-align: -2px;
+  animation: blinkCaret 1s steps(1, end) infinite;
+}
+
+@keyframes blinkCaret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
 }
 
 .structured-response {
@@ -2529,6 +2827,91 @@ onUnmounted(() => {
   max-width: 800px;
   margin-bottom: 8px;
   pointer-events: auto;
+}
+
+.upload-queue {
+  width: 90%;
+  max-width: 800px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.upload-item {
+  border-radius: 12px;
+  border: 1px solid #e1e8f7;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.upload-item.status-error {
+  border-color: #f7c7c6;
+  background: #fff8f8;
+}
+
+.upload-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.upload-item-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-item-meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.upload-progress-track {
+  margin-top: 8px;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #edf2ff;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4e75ff, #2c6bff);
+  transition: width var(--ds-duration-fast) var(--ds-ease-standard);
+}
+
+.upload-error-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-error-msg {
+  font-size: 12px;
+  color: #c43d3b;
+  flex: 1;
+}
+
+.upload-retry-btn,
+.upload-remove-btn {
+  border: none;
+  background: transparent;
+  color: var(--ds-brand-hover);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.upload-remove-btn {
+  color: var(--text-tertiary);
 }
 
 .pending-item {
@@ -3099,6 +3482,12 @@ onUnmounted(() => {
 
 .new-chat-btn-shift {
   margin-left: -4px;
+}
+
+.shortcut-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .sidebar-profile-item {
