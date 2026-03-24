@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import {
@@ -20,7 +20,7 @@ import {
   ListOutline,
   ServerOutline,
   LibraryOutline,
-  LogOutOutline
+  LogOutOutline,
 } from '@vicons/ionicons5'
 import { useUserStore } from '@/stores/user'
 
@@ -61,37 +61,37 @@ const menuOptions = [
       RouterLink,
       {
         to: {
-          name: 'admin-dashboard'
-        }
+          name: 'admin-dashboard',
+        },
       },
-      { default: () => '数据概览' }
+      { default: () => '数据总览' },
     ),
     key: 'admin-dashboard',
-    icon: renderIcon(HomeOutline)
+    icon: renderIcon(HomeOutline),
   },
   {
     label: () => h(
       RouterLink,
       {
         to: {
-          name: 'admin-models'
-        }
+          name: 'admin-models',
+        },
       },
-      { default: () => '模型监控' }
+      { default: () => '模型监控' },
     ),
     key: 'admin-models',
-    icon: renderIcon(ListOutline)
+    icon: renderIcon(ListOutline),
   },
   {
     label: () => h(RouterLink, { to: { name: 'admin-middleware' } }, { default: () => '中间件状态' }),
     key: 'admin-middleware',
-    icon: renderIcon(ServerOutline)
+    icon: renderIcon(ServerOutline),
   },
   {
-    label: () => h(RouterLink, { to: { name: 'admin-rag' } }, { default: () => 'RAG 引擎监控' }),
+    label: () => h(RouterLink, { to: { name: 'admin-rag' } }, { default: () => 'RAG 质量监控' }),
     key: 'admin-rag',
-    icon: renderIcon(LibraryOutline)
-  }
+    icon: renderIcon(LibraryOutline),
+  },
 ]
 
 const activeKey = ref<string>((route.name as string) || 'admin-dashboard')
@@ -150,12 +150,13 @@ const pushRealtimeNotification = (payload: any) => {
     createdAt: new Date().toISOString(),
     unread: true,
   }
+
   realtimeNotifications.value.unshift(item)
   realtimeNotifications.value = realtimeNotifications.value.slice(0, 100)
 
   if (item.type === 'human_transfer') {
     notificationApi.warning({
-      title: '转人工通知',
+      title: '人工接入通知',
       content: `会话 ${item.conversationId || '-'}，优先级 ${item.priority ?? '-'}`,
       duration: 5000,
     })
@@ -230,7 +231,6 @@ onUnmounted(() => {
 
 <template>
   <div class="admin-shell h-screen w-full flex overflow-hidden">
-    <!-- 侧边栏 -->
     <n-layout-sider
       bordered
       collapse-mode="width"
@@ -247,12 +247,10 @@ onUnmounted(() => {
           <div class="admin-logo-badge">
             <span class="drop-shadow-sm">A</span>
           </div>
-          <h1 v-if="!collapsed" class="admin-logo-text">
-            客服控制台
-          </h1>
+          <h1 v-if="!collapsed" class="admin-logo-text">客服控制台</h1>
         </div>
       </div>
-      
+
       <n-menu
         :collapsed="collapsed"
         :collapsed-width="64"
@@ -265,10 +263,9 @@ onUnmounted(() => {
     </n-layout-sider>
 
     <n-layout class="bg-transparent flex-1 h-full flex flex-col relative isolate">
-      <!-- 顶部通知/导航栏 -->
       <header class="admin-header sticky top-0 z-50 h-20 shrink-0 flex items-center justify-between px-8 shadow-sm">
         <div class="flex items-center space-x-4">
-          <span class="admin-title font-semibold tracking-wide text-lg drop-shadow-sm">智能体客服看板</span>
+          <span class="admin-title font-semibold tracking-wide text-lg drop-shadow-sm">智能客服运营看板</span>
         </div>
         <div class="flex items-center space-x-4">
           <n-popover trigger="click" placement="bottom-end" @update:show="(show) => { if (show) markAllRead() }">
@@ -293,7 +290,7 @@ onUnmounted(() => {
                   <div class="notify-item">
                     <div class="notify-item-title">
                       <n-icon :size="16"><InformationCircleOutline /></n-icon>
-                      <span>{{ item.type === 'human_transfer' ? '转人工通知' : '系统通知' }}</span>
+                      <span>{{ item.type === 'human_transfer' ? '人工接入通知' : '系统通知' }}</span>
                     </div>
                     <div class="notify-item-desc">
                       会话: {{ item.conversationId || '-' }} | 优先级: {{ item.priority ?? '-' }}
@@ -314,7 +311,6 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <!-- 主要内容区域 -->
       <main class="relative z-0 flex-1 min-h-0 p-8 overflow-y-auto w-full max-w-[1600px] mx-auto nice-scrollbar ds-scrollbar">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
@@ -352,7 +348,7 @@ onUnmounted(() => {
   cursor: pointer;
   background: linear-gradient(135deg, var(--ds-brand), #7b4fff);
   box-shadow: 0 10px 18px rgba(44, 107, 255, 0.28);
-  transition: transform var(--ds-duration-fast) ease;
+  transition: transform var(--ds-duration-fast) var(--ds-ease-standard);
 }
 
 .admin-logo-badge:hover {
@@ -426,35 +422,41 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-/* 覆盖 NaiveUI 的背景 */
-.n-layout-sider, .n-layout, .n-menu {
+.n-layout-sider,
+.n-layout,
+.n-menu {
   background-color: transparent !important;
 }
 
-/* 优雅滚动条 */
 .nice-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 .nice-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .nice-scrollbar::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 4px;
 }
+
 .nice-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--ds-duration-base) var(--ds-ease-standard),
+    transform var(--ds-duration-base) var(--ds-ease-standard);
 }
+
 .fade-enter-from {
   opacity: 0;
   transform: translateY(10px) scale(0.99);
 }
+
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-10px) scale(0.99);

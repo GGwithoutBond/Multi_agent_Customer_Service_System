@@ -12,6 +12,8 @@ export interface ThemeTokens {
   durationFast: string
   durationBase: string
   durationSlow: string
+  easeStandard: string
+  easeEmphasized: string
 }
 
 export interface ThemeSemanticMap {
@@ -43,6 +45,8 @@ export const themeTokens: ThemeTokens = {
   durationFast: '160ms',
   durationBase: '240ms',
   durationSlow: '360ms',
+  easeStandard: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  easeEmphasized: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
 }
 
 export const semanticMap: ThemeSemanticMap = {
@@ -60,6 +64,51 @@ export const semanticMap: ThemeSemanticMap = {
   warning: '#f29900',
   error: '#e53935',
   info: '#1473e6',
+}
+
+export const applyThemeCssVariables = (target: HTMLElement | null = typeof document !== 'undefined' ? document.documentElement : null) => {
+  if (!target) return
+
+  const semanticVars: Record<keyof ThemeSemanticMap, string> = {
+    bgPage: '--ds-bg-page',
+    bgSurface: '--ds-bg-surface',
+    bgElevated: '--ds-bg-elevated',
+    textPrimary: '--ds-text-primary',
+    textSecondary: '--ds-text-secondary',
+    textTertiary: '--ds-text-tertiary',
+    borderDefault: '--ds-border',
+    brandPrimary: '--ds-brand',
+    brandPrimaryHover: '--ds-brand-hover',
+    brandSoft: '--ds-brand-soft',
+    success: '--ds-success',
+    warning: '--ds-warning',
+    error: '--ds-error',
+    info: '--ds-info',
+  }
+
+  const tokenVars: Record<keyof ThemeTokens, string> = {
+    fontFamily: '--ds-font-family',
+    radiusSm: '--ds-radius-sm',
+    radiusMd: '--ds-radius-md',
+    radiusLg: '--ds-radius-lg',
+    radiusXl: '--ds-radius-xl',
+    shadowSm: '--ds-shadow-sm',
+    shadowMd: '--ds-shadow-md',
+    shadowLg: '--ds-shadow-lg',
+    durationFast: '--ds-duration-fast',
+    durationBase: '--ds-duration-base',
+    durationSlow: '--ds-duration-slow',
+    easeStandard: '--ds-ease-standard',
+    easeEmphasized: '--ds-ease-emphasized',
+  }
+
+  ;(Object.keys(semanticVars) as (keyof ThemeSemanticMap)[]).forEach((key) => {
+    target.style.setProperty(semanticVars[key], semanticMap[key])
+  })
+
+  ;(Object.keys(tokenVars) as (keyof ThemeTokens)[]).forEach((key) => {
+    target.style.setProperty(tokenVars[key], themeTokens[key])
+  })
 }
 
 export const buildNaiveThemeOverrides = (): GlobalThemeOverrides => ({

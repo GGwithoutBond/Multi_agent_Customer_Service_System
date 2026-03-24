@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --ds-bg-page: #f4f7ff;
   --ds-bg-surface: #ffffff;
   --ds-bg-elevated: #eef3ff;
@@ -13,15 +13,21 @@
   --ds-warning: #f29900;
   --ds-error: #e53935;
   --ds-info: #1473e6;
+
   --ds-radius-sm: 8px;
   --ds-radius-md: 12px;
   --ds-radius-lg: 16px;
   --ds-radius-xl: 24px;
+
   --ds-shadow-sm: 0 4px 12px rgba(14, 23, 38, 0.06);
   --ds-shadow-md: 0 10px 30px rgba(14, 23, 38, 0.1);
+  --ds-shadow-lg: 0 18px 50px rgba(20, 32, 56, 0.16);
+
   --ds-duration-fast: 160ms;
   --ds-duration-base: 240ms;
   --ds-duration-slow: 360ms;
+  --ds-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ds-ease-emphasized: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 * {
@@ -32,7 +38,7 @@ body {
   margin: 0;
   color: var(--ds-text-primary);
   background: radial-gradient(circle at top right, #e8efff 0%, var(--ds-bg-page) 40%);
-  font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family: var(--ds-font-family, 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif);
 }
 
 .ds-page-shell {
@@ -58,8 +64,10 @@ body {
   height: 38px;
   border-radius: 999px;
   color: var(--ds-text-secondary);
-  transition: color var(--ds-duration-fast) ease, background-color var(--ds-duration-fast) ease,
-    transform var(--ds-duration-fast) ease;
+  transition:
+    color var(--ds-duration-fast) var(--ds-ease-standard),
+    background-color var(--ds-duration-fast) var(--ds-ease-standard),
+    transform var(--ds-duration-fast) var(--ds-ease-standard);
 }
 
 .ds-icon-btn:hover {
@@ -78,7 +86,10 @@ body {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform var(--ds-duration-fast) ease, background-color var(--ds-duration-fast) ease;
+  transition:
+    transform var(--ds-duration-fast) var(--ds-ease-standard),
+    background-color var(--ds-duration-fast) var(--ds-ease-standard),
+    color var(--ds-duration-fast) var(--ds-ease-standard);
 }
 
 .ds-pill-btn:hover {
@@ -127,4 +138,15 @@ body {
 
 .ds-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #99b2ea;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

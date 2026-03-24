@@ -53,6 +53,8 @@ import { useChatStreamController } from '@/composables/useChatStreamController'
 import MessageActionBar from '@/components/chat/MessageActionBar.vue'
 import StreamStatusCard from '@/components/chat/StreamStatusCard.vue'
 import AttachmentItemCard from '@/components/chat/AttachmentItemCard.vue'
+import UIState from '@/components/common/UIState.vue'
+import type { UIStateType } from '@/types/ui-state'
 
 const emit = defineEmits<{
   refresh: []
@@ -275,6 +277,8 @@ const showWelcome = ref(false)
 const scrollContainerRef = ref<HTMLElement>()
 const innerRef = ref()
 const sending = ref(false)
+const messagesLoadState = ref<UIStateType>('retry')
+const messagesLoadError = ref('')
 const webSearchEnabled = ref(false)
 const showScrollToBottom = ref(false)
 const isDraggingFile = ref(false)
@@ -837,6 +841,8 @@ const handleScroll = (e: Event) => {
 const fetchMessages = async () => {
   if (!conversationId.value) return
   isLoading.value = true
+  messagesLoadState.value = 'loading'
+  messagesLoadError.value = ''
   try {
     const res: any = await getMessagesHistory(conversationId.value, undefined, 30)
     const payload = res.data || res
@@ -844,6 +850,7 @@ const fetchMessages = async () => {
     messages.value = items.map((msg: any) => normalizeMessage(msg))
     historyHasMore.value = !!payload.has_more
     historyCursor.value = payload.next_before_id || null
+    messagesLoadState.value = 'retry'
     scheduleScrollToBottom()
   } catch (error) {
     console.error(error)
@@ -854,9 +861,12 @@ const fetchMessages = async () => {
       messages.value = fallbackItems.map((msg: any) => normalizeMessage(msg))
       historyHasMore.value = false
       historyCursor.value = null
+      messagesLoadState.value = 'retry'
       scheduleScrollToBottom()
     } catch (fallbackError) {
       console.error(fallbackError)
+      messagesLoadState.value = 'error'
+      messagesLoadError.value = '消息记录加载失败，请重试。'
     }
   } finally {
     isLoading.value = false
@@ -892,6 +902,11 @@ const loadMoreHistory = async () => {
   }
 }
 
+const retryFetchMessages = async () => {
+  if (!conversationId.value) return
+  await fetchMessages()
+}
+
 // 监听路由变化
 watch(() => route.params.id, async (newId) => {
   if (newId && typeof newId === 'string') {
@@ -910,6 +925,8 @@ watch(() => route.params.id, async (newId) => {
       conversationId.value = ''
       historyHasMore.value = false
       historyCursor.value = null
+      messagesLoadState.value = 'retry'
+      messagesLoadError.value = ''
       showWelcome.value = true
     }
   }
@@ -1240,6 +1257,8 @@ onMounted(async () => {
     showWelcome.value = messages.value.length === 0
   } else {
     // 新会话
+    messagesLoadState.value = 'retry'
+    messagesLoadError.value = ''
     showWelcome.value = true
   }
 
@@ -1374,6 +1393,24 @@ onUnmounted(() => {
     <!-- 消息列表区域 -->
     <div ref="scrollContainerRef" class="chat-area ds-scrollbar" @scroll="handleScroll">
       <div ref="innerRef" class="messages-wrapper">
+        <UIState
+          v-if="conversationId && messagesLoadState === 'loading' && messages.length === 0"
+          type="loading"
+          title="正在加载聊天记录"
+          description="请稍候，我们正在同步这段会话。"
+          compact
+        />
+
+        <UIState
+          v-else-if="conversationId && messagesLoadState === 'error' && messages.length === 0"
+          type="error"
+          title="聊天记录加载失败"
+          :description="messagesLoadError || '请检查网络后重试。'"
+          action-text="重试"
+          compact
+          @action="retryFetchMessages"
+        />
+
         <!-- 消息列表 -->
         <template v-if="messages.length > 0">
           <div v-for="(msg, index) in messages" :key="index" class="message-row" :class="msg.role">
@@ -1509,13 +1546,13 @@ onUnmounted(() => {
         </template>
 
         <!-- 欢迎语（当没有消息时显示在消息区域中间） -->
-        <div v-if="showWelcome && messages.length === 0" class="greeting-container">
+        <div v-if="showWelcome && messages.length === 0 && messagesLoadState === 'retry'" class="greeting-container">
           <div class="greeting-hi"><span class="gradient-star">✨</span> 你好，{{ userName }}</div>
           <div class="greeting-sub">有什么我可以帮助你的？</div>
         </div>
 
         <!-- 快捷短语（当没有消息时显示） -->
-        <div class="suggestion-pills" v-if="showWelcome && messages.length === 0">
+        <div class="suggestion-pills" v-if="showWelcome && messages.length === 0 && messagesLoadState === 'retry'">
           <div class="pill" @click="inputValue = '查询最近订单的物流状态'" style="animation-delay: 0.1s">
             <span>📦</span> 查询订单
           </div>

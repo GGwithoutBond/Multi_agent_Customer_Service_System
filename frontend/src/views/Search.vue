@@ -1,10 +1,12 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDialog, useMessage, NAvatar, NCheckbox, NDropdown, NIcon } from 'naive-ui'
 import { CreateOutline, MenuOutline, SearchOutline, SettingsOutline, TrashOutline } from '@vicons/ionicons5'
 import { deleteConversation, getConversations } from '@/api/conversation'
 import { useUserStore } from '@/stores/user'
+import UIState from '@/components/common/UIState.vue'
+import type { UIStateType } from '@/types/ui-state'
 
 const router = useRouter()
 const message = useMessage()
@@ -16,9 +18,9 @@ const conversations = ref<any[]>([])
 const searchQuery = ref('')
 const selectedIds = ref<string[]>([])
 const isDeleting = ref(false)
+const pageState = ref<UIStateType>('loading')
 
 const userName = computed(() => userStore.user?.name || '用户')
-
 const settingsOptions = [{ label: '退出登录', key: 'logout' }]
 
 const handleSettingsSelect = (key: string) => {
@@ -40,11 +42,14 @@ const handleSelectChat = (id: string) => {
 }
 
 const fetchConversationList = async () => {
+  pageState.value = 'loading'
   try {
     const res: any = await getConversations()
     conversations.value = Array.isArray(res) ? res : res.data || []
+    pageState.value = 'retry'
   } catch (error) {
     console.error('获取历史会话失败', error)
+    pageState.value = 'error'
   }
 }
 
@@ -52,6 +57,16 @@ const filteredConversations = computed(() => {
   if (!searchQuery.value) return conversations.value
   const q = searchQuery.value.toLowerCase()
   return conversations.value.filter((c) => (c.title || '').toLowerCase().includes(q))
+})
+
+const emptyTitle = computed(() => {
+  if (searchQuery.value.trim()) return '未找到匹配会话'
+  return '暂无历史会话'
+})
+
+const emptyDescription = computed(() => {
+  if (searchQuery.value.trim()) return '请尝试更换关键词，或返回会话页新建对话。'
+  return '你还没有历史会话，点击左侧按钮开始新的对话。'
 })
 
 const formatDate = (dateString?: string) => {
@@ -81,9 +96,7 @@ const isAllSelected = computed(
 )
 
 const isIndeterminate = computed(
-  () =>
-    selectedIds.value.length > 0 &&
-    selectedIds.value.length < filteredConversations.value.length,
+  () => selectedIds.value.length > 0 && selectedIds.value.length < filteredConversations.value.length,
 )
 
 const handleBatchDelete = () => {
@@ -171,7 +184,7 @@ onMounted(() => {
           <div class="menu-btn ds-icon-btn" @click="toggleSidebar" v-if="!isSidebarOpen">
             <n-icon :size="20"><MenuOutline /></n-icon>
           </div>
-          <span class="page-title">会话检索中心</span>
+          <span class="page-title">会话搜索中心</span>
         </div>
       </div>
 
@@ -188,47 +201,73 @@ onMounted(() => {
           />
         </div>
 
-        <div class="recent-section" v-if="filteredConversations.length > 0">
-          <div class="section-header">
-            <div class="header-left">
-              <n-checkbox
-                :checked="isAllSelected"
-                :indeterminate="isIndeterminate"
-                @update:checked="toggleSelectAll"
-              />
-              <span>最近会话</span>
-            </div>
-            <button
-              type="button"
-              class="delete-btn"
-              :class="{ disabled: selectedIds.length === 0 || isDeleting }"
-              @click="handleBatchDelete"
-            >
-              <n-icon :size="16"><TrashOutline /></n-icon>
-              <span>{{ isDeleting ? '删除中...' : '批量删除' }}</span>
-            </button>
-          </div>
+        <div class="recent-section">
+          <UIState
+            v-if="pageState === 'loading'"
+            type="loading"
+            title="正在加载会话"
+            description="请稍候，我们正在同步你的历史记录。"
+            compact
+          />
 
-          <div class="list-container">
-            <div v-for="convo in filteredConversations" :key="convo.id" class="list-item">
-              <div class="item-left">
-                <n-checkbox
-                  :checked="selectedIds.includes(convo.id)"
-                  @update:checked="(checked) => toggleSelection(convo.id, checked)"
-                />
-                <span class="item-title" @click="handleSelectChat(convo.id)">
-                  {{ convo.title || '新会话' }}
-                </span>
-              </div>
-              <div class="item-right">
-                <span class="item-date">{{ formatDate(convo.updated_at || convo.created_at) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+          <UIState
+            v-else-if="pageState === 'error'"
+            type="error"
+            title="会话加载失败"
+            description="网络或服务出现问题，请点击重试。"
+            action-text="重试"
+            compact
+            @action="fetchConversationList"
+          />
 
-        <div v-else class="empty-state">
-          没有找到匹配的会话，请尝试更换关键词。
+          <template v-else>
+            <UIState
+              v-if="filteredConversations.length === 0"
+              type="empty"
+              :title="emptyTitle"
+              :description="emptyDescription"
+              compact
+            />
+
+            <template v-else>
+              <div class="section-header">
+                <div class="header-left">
+                  <n-checkbox
+                    :checked="isAllSelected"
+                    :indeterminate="isIndeterminate"
+                    @update:checked="toggleSelectAll"
+                  />
+                  <span>最近会话</span>
+                </div>
+                <button
+                  type="button"
+                  class="delete-btn"
+                  :class="{ disabled: selectedIds.length === 0 || isDeleting }"
+                  @click="handleBatchDelete"
+                >
+                  <n-icon :size="16"><TrashOutline /></n-icon>
+                  <span>{{ isDeleting ? '删除中...' : '删除选中' }}</span>
+                </button>
+              </div>
+
+              <div class="list-container">
+                <div v-for="convo in filteredConversations" :key="convo.id" class="list-item">
+                  <div class="item-left">
+                    <n-checkbox
+                      :checked="selectedIds.includes(convo.id)"
+                      @update:checked="(checked) => toggleSelection(convo.id, checked)"
+                    />
+                    <span class="item-title" @click="handleSelectChat(convo.id)">
+                      {{ convo.title || '新会话' }}
+                    </span>
+                  </div>
+                  <div class="item-right">
+                    <span class="item-date">{{ formatDate(convo.updated_at || convo.created_at) }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </template>
         </div>
       </div>
     </div>
@@ -249,7 +288,7 @@ onMounted(() => {
   background: transparent;
   display: flex;
   flex-direction: column;
-  transition: width 0.28s ease;
+  transition: width 0.28s var(--ds-ease-standard);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -438,6 +477,7 @@ onMounted(() => {
   max-width: 780px;
   display: flex;
   flex-direction: column;
+  min-height: 180px;
 }
 
 .section-header {
@@ -468,6 +508,7 @@ onMounted(() => {
   cursor: pointer;
   padding: 8px 12px;
   border-radius: 999px;
+  transition: all var(--ds-duration-fast) var(--ds-ease-standard);
 }
 
 .delete-btn:hover {
@@ -522,11 +563,5 @@ onMounted(() => {
   color: var(--ds-text-tertiary);
   white-space: nowrap;
   margin-left: 20px;
-}
-
-.empty-state {
-  margin-top: 44px;
-  font-size: 14px;
-  color: var(--ds-text-tertiary);
 }
 </style>

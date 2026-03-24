@@ -1,8 +1,8 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { NIcon } from 'naive-ui'
 import { AlertCircleOutline, RefreshOutline, WifiOutline } from '@vicons/ionicons5'
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     state: 'idle' | 'streaming' | 'stopped' | 'error' | 'offline'
     reason?: string
@@ -32,7 +32,7 @@ const emit = defineEmits<{
         <div class="title">
           {{ state === 'offline' ? '网络已断开' : state === 'error' ? '响应中断' : '生成已停止' }}
         </div>
-        <div class="desc">{{ reason || '你可以重试或继续当前会话。' }}</div>
+        <div class="desc">{{ reason || '你可以重试上一条，或继续当前会话。' }}</div>
       </div>
     </div>
     <div class="status-actions">

@@ -1,15 +1,14 @@
-<template>
+﻿<template>
   <div class="login-page">
-    <!-- Left Content Section with Animated Characters -->
     <div class="left-section">
       <div class="logo-section">
         <a href="/" class="logo-link">
           <img
             src="https://i.postimg.cc/nLrDYrHW/icon.png"
-            alt="xxx客服系统 logo"
+            alt="智能客服系统 Logo"
             class="logo-image"
           />
-          <span>xxx客服系统</span>
+          <span>智能客服系统</span>
         </a>
       </div>
 
@@ -24,38 +23,32 @@
       </div>
 
       <div class="footer-links">
-        <a href="/privacy-policy" class="footer-link">Privacy Policy</a>
-        <a href="/terms" class="footer-link">Terms of Service</a>
+        <a href="/privacy-policy" class="footer-link">隐私政策</a>
+        <a href="/terms" class="footer-link">服务条款</a>
       </div>
 
-      <!-- Decorative elements -->
       <div class="grid-overlay"></div>
       <div class="blur-circle blur-circle-1"></div>
       <div class="blur-circle blur-circle-2"></div>
     </div>
 
-    <!-- Right Login Section -->
     <div class="right-section">
       <div class="form-wrapper">
-        <!-- Mobile Logo -->
         <div class="mobile-logo">
           <img
             src="https://i.postimg.cc/nLrDYrHW/icon.png"
-            alt="xxx客服系统 logo"
+            alt="智能客服系统 Logo"
             class="logo-image"
           />
-          <span>xxx客服系统</span>
+          <span>智能客服系统</span>
         </div>
 
-        <!-- Header -->
         <div class="form-header">
-          <h1 class="form-title">Welcome back!</h1>
-          <p class="form-subtitle">Please enter your details</p>
+          <h1 class="form-title">欢迎回来</h1>
+          <p class="form-subtitle">请输入账号和密码登录</p>
         </div>
 
-        <!-- Login Form -->
         <form @submit.prevent="handleSubmit" class="login-form">
-          <!-- Account Field -->
           <div class="form-group">
             <label for="email" class="form-label">账号</label>
             <input
@@ -72,15 +65,14 @@
             <p v-if="errors.email" class="error-message">{{ errors.email }}</p>
           </div>
 
-          <!-- Password Field -->
           <div class="form-group">
-            <label for="password" class="form-label">Password</label>
+            <label for="password" class="form-label">密码</label>
             <div class="password-wrapper">
               <input
                 id="password"
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
-                placeholder="••••••••"
+                placeholder="请输入密码"
                 class="form-input"
                 required
               />
@@ -104,27 +96,20 @@
             <p v-if="errors.password" class="error-message">{{ errors.password }}</p>
           </div>
 
-          <!-- Remember & Forgot -->
           <div class="form-options">
             <label class="checkbox-label">
               <input type="checkbox" v-model="rememberMe" class="checkbox" />
-              <span>Remember for 30 days</span>
+              <span>30 天内免登录</span>
             </label>
-            <a href="/forgot-password" class="forgot-link">Forgot password?</a>
+            <a href="/forgot-password" class="forgot-link">忘记密码？</a>
           </div>
 
-          <!-- Error Alert -->
           <div v-if="errorMessage" class="error-alert">
             {{ errorMessage }}
           </div>
 
-          <!-- Submit Button -->
-          <button
-            type="submit"
-            class="submit-button"
-            :disabled="isLoading"
-          >
-            <span class="button-text">{{ isLoading ? 'Signing in...' : 'Log in' }}</span>
+          <button type="submit" class="submit-button" :disabled="isLoading">
+            <span class="button-text">{{ isLoading ? '登录中...' : '登录' }}</span>
             <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14"/>
               <path d="m12 5 7 7-7 7"/>
@@ -132,9 +117,8 @@
           </button>
         </form>
 
-        <!-- Sign Up Link -->
         <div class="signup-link">
-          Don't have an account? <a href="/signup">Sign Up</a>
+          还没有账号？<a href="/signup">立即注册</a>
         </div>
       </div>
     </div>
@@ -162,7 +146,7 @@ const loginSuccess = ref(false)
 const errorMessage = ref('')
 const errors = ref({
   email: '',
-  password: ''
+  password: '',
 })
 
 const validateForm = () => {
@@ -178,7 +162,7 @@ const validateForm = () => {
     errors.value.password = '密码不能为空'
     isValid = false
   } else if (password.value.length < 6) {
-    errors.value.password = '密码长度不能小于6位'
+    errors.value.password = '密码长度不能少于 6 位'
     isValid = false
   }
 
@@ -196,7 +180,7 @@ const handleSubmit = async () => {
   try {
     const res = await login({ username: email.value, password: password.value })
     const token = res.data?.access_token || res.access_token || res.token
-    
+
     if (token) {
       userStore.setToken(token)
       loginSuccess.value = true
@@ -204,10 +188,10 @@ const handleSubmit = async () => {
         router.push('/')
       }, 1500)
     } else {
-      throw new Error('Invalid server response')
+      throw new Error('服务器返回异常')
     }
   } catch (error) {
-    errorMessage.value = error.message || '登录失败，请检查账号和密码'
+    errorMessage.value = error?.message || '登录失败，请检查账号和密码'
     loginFailed.value = true
     setTimeout(() => {
       loginFailed.value = false
@@ -277,7 +261,7 @@ const handleSubmit = async () => {
   align-items: center;
   gap: 2rem;
   font-size: 0.875rem;
-  color: #4b5563;
+  color: #e5e7eb;
 }
 
 .footer-link {
@@ -287,7 +271,7 @@ const handleSubmit = async () => {
 }
 
 .footer-link:hover {
-  color: #1f2937;
+  color: #fff;
 }
 
 .grid-overlay {
@@ -487,9 +471,6 @@ const handleSubmit = async () => {
   cursor: pointer;
   overflow: hidden;
   transition: all 0.3s;
-}
-
-.submit-button {
   background: #111827;
   color: white;
   border: none;
