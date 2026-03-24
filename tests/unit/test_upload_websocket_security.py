@@ -104,3 +104,30 @@ async def test_websocket_authorize_rate_limit():
             await websocket_module._authorize_websocket_connection(websocket, str(conversation_id))
 
     assert exc.value.code == 4429
+
+
+@pytest.mark.asyncio
+async def test_admin_websocket_authorize_rejects_missing_token():
+    websocket = SimpleNamespace(query_params={}, client=SimpleNamespace(host="127.0.0.1"))
+    with pytest.raises(websocket_module.WebSocketAuthError) as exc:
+        await websocket_module._authorize_admin_websocket(websocket)
+    assert exc.value.code == 4401
+
+
+@pytest.mark.asyncio
+async def test_admin_websocket_authorize_rejects_non_admin():
+    websocket_module._ws_connect_rate_limiter = SlidingWindowRateLimiter(window_seconds=60)
+    user_id = uuid4()
+    websocket = SimpleNamespace(query_params={"token": "valid-token"}, client=SimpleNamespace(host="127.0.0.1"))
+    db_session = AsyncMock()
+    settings = SimpleNamespace(WS_CONNECT_RATE_LIMIT_PER_MINUTE=20)
+    normal_user = SimpleNamespace(is_active=True, is_admin=False)
+
+    with patch("src.api.v1.websocket.decode_access_token", return_value={"sub": str(user_id)}), \
+            patch("src.api.v1.websocket.get_session_factory", return_value=_build_fake_factory(db_session)), \
+            patch("src.repositories.user_repo.UserRepository.get_by_id", new=AsyncMock(return_value=normal_user)), \
+            patch("src.api.v1.websocket.get_settings", return_value=settings):
+        with pytest.raises(websocket_module.WebSocketAuthError) as exc:
+            await websocket_module._authorize_admin_websocket(websocket)
+
+    assert exc.value.code == 4403

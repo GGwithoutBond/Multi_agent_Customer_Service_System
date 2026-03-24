@@ -32,6 +32,7 @@ logs/
 # 数据库迁移
 alembic/versions/*.py
 !alembic/versions/.gitkeep
+!alembic/versions/20260324_01_add_is_pinned_to_conversations.py
 
 # 系统文件
 .DS_Store

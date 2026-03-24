@@ -60,3 +60,39 @@ async def test_delete_conversation_for_user_non_owner_raises_not_found():
     with pytest.raises(NotFoundError):
         await service.delete_conversation_for_user(conversation_id, user_id)
 
+
+@pytest.mark.asyncio
+async def test_update_pin_for_user_calls_update_with_flag():
+    conversation_id = uuid4()
+    user_id = uuid4()
+    conv = SimpleNamespace(id=conversation_id, user_id=user_id, is_pinned=True)
+
+    service = ConversationService(db=AsyncMock())
+    service.conv_repo = AsyncMock()
+    service.conv_repo.update_by_id_for_user = AsyncMock(return_value=conv)
+
+    result = await service.update_pin_for_user(conversation_id, user_id, is_pinned=True)
+    assert result == conv
+    service.conv_repo.update_by_id_for_user.assert_awaited_once_with(
+        conversation_id,
+        user_id,
+        is_pinned=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_for_user_returns_summary():
+    user_id = uuid4()
+    c1 = uuid4()
+    c2 = uuid4()
+    c3 = uuid4()
+
+    service = ConversationService(db=AsyncMock())
+    service.conv_repo = AsyncMock()
+    service.conv_repo.bulk_delete_by_ids_for_user = AsyncMock(return_value=([c1, c2], [c3]))
+
+    result = await service.batch_delete_for_user(user_id=user_id, conversation_ids=[c1, c2, c3])
+    assert result["requested"] == 3
+    assert result["deleted"] == 2
+    assert result["skipped"] == 1
+    assert result["skipped_ids"] == [c3]

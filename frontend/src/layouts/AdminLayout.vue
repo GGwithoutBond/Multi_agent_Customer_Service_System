@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { h, ref, watch } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router'
 import {
+  NBadge,
+  NButton,
+  NIcon,
   NLayout,
   NLayoutSider,
+  NList,
+  NListItem,
   NMenu,
-  NIcon,
-  NButton
+  NPopover,
+  useNotification,
 } from 'naive-ui'
 import {
+  NotificationsOutline,
   HomeOutline,
+  InformationCircleOutline,
   ListOutline,
   ServerOutline,
   LibraryOutline,
@@ -20,8 +27,29 @@ import { useUserStore } from '@/stores/user'
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const notificationApi = useNotification()
 
 const collapsed = ref(false)
+const ws = ref<WebSocket | null>(null)
+const reconnectTimer = ref<number | null>(null)
+const reconnectAttempts = ref(0)
+
+interface AdminRealtimeNotification {
+  id: string
+  type: 'human_transfer' | 'notification'
+  conversationId?: string
+  userId?: string
+  userMessage?: string
+  urgency?: string
+  sentiment?: string
+  priority?: number
+  createdAt: string
+  unread: boolean
+}
+
+const realtimeNotifications = ref<AdminRealtimeNotification[]>([])
+const unreadCount = computed(() => realtimeNotifications.value.filter(item => item.unread).length)
+const isSocketConnected = ref(false)
 
 function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -90,9 +118,114 @@ const handleMenuUpdate = (key: string) => {
 }
 
 const handleLogout = () => {
+  if (ws.value) {
+    ws.value.close()
+    ws.value = null
+  }
+  if (reconnectTimer.value) {
+    clearTimeout(reconnectTimer.value)
+    reconnectTimer.value = null
+  }
   userStore.logout()
   router.push('/login')
 }
+
+const getAdminWsUrl = () => {
+  const token = localStorage.getItem('token')
+  if (!token) return null
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/api/v1/ws/admin/notifications?token=${encodeURIComponent(token)}`
+}
+
+const pushRealtimeNotification = (payload: any) => {
+  const item: AdminRealtimeNotification = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type: payload.type === 'human_transfer' ? 'human_transfer' : 'notification',
+    conversationId: payload.conversation_id,
+    userId: payload.user_id,
+    userMessage: payload.user_message,
+    urgency: payload.urgency,
+    sentiment: payload.sentiment,
+    priority: payload.priority,
+    createdAt: new Date().toISOString(),
+    unread: true,
+  }
+  realtimeNotifications.value.unshift(item)
+  realtimeNotifications.value = realtimeNotifications.value.slice(0, 100)
+
+  if (item.type === 'human_transfer') {
+    notificationApi.warning({
+      title: '转人工通知',
+      content: `会话 ${item.conversationId || '-'}，优先级 ${item.priority ?? '-'}`,
+      duration: 5000,
+    })
+  }
+}
+
+const scheduleReconnect = () => {
+  if (reconnectTimer.value) return
+  const wait = Math.min(10000, 1000 * (reconnectAttempts.value + 1))
+  reconnectTimer.value = window.setTimeout(() => {
+    reconnectTimer.value = null
+    reconnectAttempts.value += 1
+    connectAdminNotifications()
+  }, wait)
+}
+
+const connectAdminNotifications = () => {
+  const wsUrl = getAdminWsUrl()
+  if (!wsUrl) return
+
+  try {
+    ws.value = new WebSocket(wsUrl)
+  } catch (_err) {
+    scheduleReconnect()
+    return
+  }
+
+  ws.value.onopen = () => {
+    reconnectAttempts.value = 0
+    isSocketConnected.value = true
+  }
+
+  ws.value.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data)
+      if (payload.type === 'connected' || payload.type === 'pong') return
+      pushRealtimeNotification(payload)
+    } catch (_err) {
+      // ignore malformed payload
+    }
+  }
+
+  ws.value.onclose = () => {
+    isSocketConnected.value = false
+    ws.value = null
+    scheduleReconnect()
+  }
+
+  ws.value.onerror = () => {
+    isSocketConnected.value = false
+  }
+}
+
+const markAllRead = () => {
+  realtimeNotifications.value = realtimeNotifications.value.map(item => ({ ...item, unread: false }))
+}
+
+onMounted(() => {
+  connectAdminNotifications()
+})
+
+onUnmounted(() => {
+  if (reconnectTimer.value) {
+    clearTimeout(reconnectTimer.value)
+  }
+  if (ws.value) {
+    ws.value.close()
+    ws.value = null
+  }
+})
 </script>
 
 <template>
@@ -138,6 +271,41 @@ const handleLogout = () => {
           <span class="admin-title font-semibold tracking-wide text-lg drop-shadow-sm">智能体客服看板</span>
         </div>
         <div class="flex items-center space-x-4">
+          <n-popover trigger="click" placement="bottom-end" @update:show="(show) => { if (show) markAllRead() }">
+            <template #trigger>
+              <n-button quaternary circle :title="isSocketConnected ? '实时通知已连接' : '实时通知重连中'">
+                <template #icon>
+                  <n-badge :value="unreadCount" :max="99" :show="unreadCount > 0">
+                    <n-icon size="20"><NotificationsOutline /></n-icon>
+                  </n-badge>
+                </template>
+              </n-button>
+            </template>
+            <div class="notify-panel">
+              <div class="notify-header">
+                <span>实时通知</span>
+                <span :class="isSocketConnected ? 'notify-status-online' : 'notify-status-offline'">
+                  {{ isSocketConnected ? '已连接' : '重连中' }}
+                </span>
+              </div>
+              <n-list v-if="realtimeNotifications.length > 0" hoverable clickable>
+                <n-list-item v-for="item in realtimeNotifications.slice(0, 20)" :key="item.id">
+                  <div class="notify-item">
+                    <div class="notify-item-title">
+                      <n-icon :size="16"><InformationCircleOutline /></n-icon>
+                      <span>{{ item.type === 'human_transfer' ? '转人工通知' : '系统通知' }}</span>
+                    </div>
+                    <div class="notify-item-desc">
+                      会话: {{ item.conversationId || '-' }} | 优先级: {{ item.priority ?? '-' }}
+                    </div>
+                    <div class="notify-item-time">{{ new Date(item.createdAt).toLocaleString() }}</div>
+                  </div>
+                </n-list-item>
+              </n-list>
+              <div v-else class="notify-empty">暂无实时通知</div>
+            </div>
+          </n-popover>
+
           <n-button quaternary circle @click="handleLogout" class="hover:bg-red-50 hover:text-red-500 transition-all" title="退出登录">
             <template #icon>
               <n-icon size="20"><LogOutOutline /></n-icon>
@@ -206,6 +374,56 @@ const handleLogout = () => {
 
 .admin-title {
   color: var(--ds-text-primary);
+}
+
+.notify-panel {
+  width: 360px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.notify-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.notify-status-online {
+  color: #16a34a;
+}
+
+.notify-status-offline {
+  color: #ef4444;
+}
+
+.notify-item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--ds-text-primary);
+}
+
+.notify-item-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+}
+
+.notify-item-time {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--ds-text-tertiary);
+}
+
+.notify-empty {
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--ds-text-tertiary);
+  font-size: 12px;
 }
 
 /* 覆盖 NaiveUI 的背景 */

@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Any, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -49,3 +49,11 @@ class FeedbackResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class MessageHistoryResponse(BaseModel):
+    """Cursor-based message history payload."""
+
+    items: list[MessageResponse]
+    has_more: bool
+    next_before_id: Optional[UUID] = None

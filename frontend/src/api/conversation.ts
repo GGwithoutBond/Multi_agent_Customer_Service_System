@@ -23,9 +23,25 @@ export function getConversations() {
   })
 }
 
+export function updateConversationPin(id: string, isPinned: boolean) {
+  return request({
+    url: `/conversations/${id}/pin`,
+    method: 'patch',
+    data: { is_pinned: isPinned }
+  })
+}
+
 export function deleteConversation(id: string) {
   return request({
     url: `/conversations/${id}`,
     method: 'delete'
+  })
+}
+
+export function batchDeleteConversations(conversationIds: string[]) {
+  return request({
+    url: '/conversations/batch-delete',
+    method: 'post',
+    data: { conversation_ids: conversationIds }
   })
 }

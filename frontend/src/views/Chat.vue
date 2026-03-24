@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, useDialog, NIcon, NAvatar, NInput, NTag, NDropdown, NDrawer, NDrawerContent, NModal } from 'naive-ui'
+import { useMessage, useDialog, NIcon, NAvatar, NInput, NTag, NDropdown, NDrawer, NDrawerContent, NModal, NRate, NCheckbox } from 'naive-ui'
 import {
   SendOutline,
   ImageOutline,
@@ -46,8 +46,8 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import 'highlight.js/styles/github-dark.css'
 import MarkdownIt from 'markdown-it'
-import { getMessages, uploadFile, getAvailableOrders, getAvailableProducts } from '@/api/chat'
-import { updateConversation, getConversations, deleteConversation } from '@/api/conversation'
+import { getMessages, getMessagesHistory, uploadFile, getAvailableOrders, getAvailableProducts, submitMessageFeedback } from '@/api/chat'
+import { updateConversation, getConversations, deleteConversation, updateConversationPin, batchDeleteConversations } from '@/api/conversation'
 import { useUserStore } from '@/stores/user'
 import { useChatStreamController } from '@/composables/useChatStreamController'
 import MessageActionBar from '@/components/chat/MessageActionBar.vue'
@@ -289,11 +289,38 @@ const showStreamRecovery = computed(
 
 const isSidebarOpen = ref(window.innerWidth > 768)
 const conversations = ref<any[]>([])
+const batchMode = ref(false)
+const selectedConversationIds = ref<string[]>([])
+const historyHasMore = ref(false)
+const historyCursor = ref<string | null>(null)
+const historyLoading = ref(false)
+const showFeedbackModal = ref(false)
+const feedbackMessageId = ref<string>('')
+const feedbackRating = ref(0)
+const feedbackComment = ref('')
+
+const normalizeMessage = (msg: any) => {
+  if (msg.metadata_) {
+    if (msg.metadata_.attachments) {
+      msg.attachments = msg.metadata_.attachments
+    }
+    if (msg.metadata_.action_button_prompt) {
+      msg.actionButtonPrompt = msg.metadata_.action_button_prompt
+    }
+    if (msg.metadata_.action_buttons) {
+      msg.actionButtons = msg.metadata_.action_buttons.map((a: any) => ({ ...a, disabled: false }))
+    }
+  }
+  finalizeAssistantMessage(msg)
+  return msg
+}
 
 const fetchConversationList = async () => {
   try {
     const res: any = await getConversations()
-    conversations.value = Array.isArray(res) ? res : (res.data || [])
+    const items = Array.isArray(res) ? res : (res.data || [])
+    conversations.value = items.sort((a: any, b: any) => Number(!!b.is_pinned) - Number(!!a.is_pinned))
+    selectedConversationIds.value = selectedConversationIds.value.filter(id => conversations.value.some(c => c.id === id))
   } catch (error) {
     console.error('获取历史会话失败', error)
   }
@@ -304,10 +331,16 @@ const toggleSidebar = () => {
 }
 
 const handleNewChat = () => {
+  batchMode.value = false
+  selectedConversationIds.value = []
   router.push('/')
 }
 
 const handleSelectChat = (id: string) => {
+  if (batchMode.value) {
+    toggleConversationSelect(id)
+    return
+  }
   router.push(`/chat/${id}`)
 }
 
@@ -318,14 +351,76 @@ const renameTitle = ref('')
 
 const chatOptions = [
   { label: '分享会话', key: 'share', icon: renderIcon(ShareOutline) },
-  { label: '置顶', key: 'pin', icon: renderIcon(PinOutline) },
+  { label: '置顶/取消置顶', key: 'pin', icon: renderIcon(PinOutline) },
   { label: '重命名', key: 'rename', icon: renderIcon(PencilOutline) },
   { label: '删除', key: 'delete', icon: renderIcon(TrashOutline) }
 ]
 
+const toggleBatchMode = () => {
+  batchMode.value = !batchMode.value
+  if (!batchMode.value) {
+    selectedConversationIds.value = []
+  }
+}
+
+const toggleConversationSelect = (id: string) => {
+  if (!batchMode.value) return
+  if (selectedConversationIds.value.includes(id)) {
+    selectedConversationIds.value = selectedConversationIds.value.filter(item => item !== id)
+  } else {
+    selectedConversationIds.value.push(id)
+  }
+}
+
+const handleBatchDelete = async () => {
+  if (selectedConversationIds.value.length === 0) {
+    message.info('请先选择要删除的会话')
+    return
+  }
+  const ids = [...selectedConversationIds.value]
+  dialog.warning({
+    title: '批量删除会话',
+    content: `确认删除选中的 ${ids.length} 个会话吗？`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    async onPositiveClick() {
+      try {
+        await batchDeleteConversations(ids)
+        if (conversationId.value && ids.includes(conversationId.value)) {
+          router.push('/')
+        }
+        message.success('批量删除完成')
+        selectedConversationIds.value = []
+        batchMode.value = false
+        fetchConversationList()
+      } catch (err) {
+        message.error('批量删除失败，请稍后重试')
+      }
+    }
+  })
+}
+
 const handleChatOption = async (key: string, id: string) => {
-  if (key === 'share' || key === 'pin') {
-    message.info(`该能力即将上线：${key === 'share' ? '分享会话' : '置顶会话'}`)
+  if (key === 'share') {
+    const shareUrl = `${window.location.origin}/chat/${id}`
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      message.success('会话链接已复制')
+    } catch (_err) {
+      message.error('复制失败，请手动复制地址栏链接')
+    }
+  } else if (key === 'pin') {
+    const chat = conversations.value.find(c => c.id === id)
+    if (!chat) return
+    const targetPinned = !chat.is_pinned
+    try {
+      await updateConversationPin(id, targetPinned)
+      chat.is_pinned = targetPinned
+      message.success(targetPinned ? '会话已置顶' : '会话已取消置顶')
+      fetchConversationList()
+    } catch (_err) {
+      message.error('置顶状态更新失败')
+    }
   } else if (key === 'rename') {
     const chat = conversations.value.find(c => c.id === id)
     if (chat) {
@@ -458,7 +553,17 @@ const settingsOptions = [
 ]
 
 const handleSettingsSelect = (key: string) => {
-  if (key === 'logout') {
+  if (key === 'feedback') {
+    const latestAssistantMessage = [...messages.value].reverse().find(msg => msg.role === 'assistant' && msg.id)
+    if (!latestAssistantMessage?.id) {
+      message.info('当前会话暂无可反馈的机器人回复')
+      return
+    }
+    feedbackMessageId.value = latestAssistantMessage.id
+    feedbackRating.value = 0
+    feedbackComment.value = ''
+    showFeedbackModal.value = true
+  } else if (key === 'logout') {
     userStore.logout()
     router.push('/login')
   }
@@ -555,6 +660,40 @@ const loadOrderOptions = async () => {
 const copyMessage = (content: string) => {
   navigator.clipboard.writeText(content)
   message.success('内容已复制')
+}
+
+const openFeedbackForMessage = (msg: any) => {
+  if (!msg?.id) {
+    message.warning('该消息暂不支持反馈')
+    return
+  }
+  feedbackMessageId.value = msg.id
+  feedbackRating.value = 0
+  feedbackComment.value = ''
+  showFeedbackModal.value = true
+}
+
+const submitFeedback = async () => {
+  if (!feedbackMessageId.value) {
+    message.warning('缺少反馈目标消息')
+    return
+  }
+  if (!feedbackRating.value) {
+    message.warning('请先评分')
+    return
+  }
+
+  try {
+    await submitMessageFeedback({
+      message_id: feedbackMessageId.value,
+      rating: feedbackRating.value,
+      comment: feedbackComment.value.trim() || undefined,
+    })
+    showFeedbackModal.value = false
+    message.success('反馈已提交，感谢你的建议')
+  } catch (_err) {
+    message.error('反馈提交失败，请稍后重试')
+  }
 }
 
 const regenerateMessage = (index: number) => {
@@ -690,34 +829,66 @@ const handleScroll = (e: Event) => {
   const target = e.target as HTMLElement
   const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100
   showScrollToBottom.value = !isNearBottom
+  if (target.scrollTop < 80) {
+    loadMoreHistory()
+  }
 }
 
 const fetchMessages = async () => {
   if (!conversationId.value) return
   isLoading.value = true
   try {
-    const res: any = await getMessages(conversationId.value)
-    messages.value = Array.isArray(res) ? res : (res.data || [])
-    // 解析 attachments 和 action_buttons
-    messages.value.forEach((msg: any) => {
-      if (msg.metadata_) {
-        if (msg.metadata_.attachments) {
-          msg.attachments = msg.metadata_.attachments
-        }
-        if (msg.metadata_.action_button_prompt) {
-          msg.actionButtonPrompt = msg.metadata_.action_button_prompt
-        }
-        if (msg.metadata_.action_buttons) {
-          msg.actionButtons = msg.metadata_.action_buttons.map((a: any) => ({ ...a, disabled: false }))
-        }
-      }
-      finalizeAssistantMessage(msg)
-    })
+    const res: any = await getMessagesHistory(conversationId.value, undefined, 30)
+    const payload = res.data || res
+    const items = payload.items || []
+    messages.value = items.map((msg: any) => normalizeMessage(msg))
+    historyHasMore.value = !!payload.has_more
+    historyCursor.value = payload.next_before_id || null
     scheduleScrollToBottom()
   } catch (error) {
     console.error(error)
+    // 向后兼容旧接口
+    try {
+      const fallbackRes: any = await getMessages(conversationId.value)
+      const fallbackItems = Array.isArray(fallbackRes) ? fallbackRes : (fallbackRes.data || [])
+      messages.value = fallbackItems.map((msg: any) => normalizeMessage(msg))
+      historyHasMore.value = false
+      historyCursor.value = null
+      scheduleScrollToBottom()
+    } catch (fallbackError) {
+      console.error(fallbackError)
+    }
   } finally {
     isLoading.value = false
+  }
+}
+
+const loadMoreHistory = async () => {
+  if (!conversationId.value || !historyHasMore.value || historyLoading.value || !historyCursor.value) return
+  if (!scrollContainerRef.value) return
+
+  historyLoading.value = true
+  const container = scrollContainerRef.value
+  const previousHeight = container.scrollHeight
+
+  try {
+    const res: any = await getMessagesHistory(conversationId.value, historyCursor.value, 30)
+    const payload = res.data || res
+    const olderItems = (payload.items || []).map((msg: any) => normalizeMessage(msg))
+    const existingIds = new Set(messages.value.map((msg: any) => msg.id))
+    const deduped = olderItems.filter((msg: any) => !existingIds.has(msg.id))
+    if (deduped.length > 0) {
+      messages.value = [...deduped, ...messages.value]
+      await nextTick()
+      const newHeight = container.scrollHeight
+      container.scrollTop = container.scrollTop + (newHeight - previousHeight)
+    }
+    historyHasMore.value = !!payload.has_more
+    historyCursor.value = payload.next_before_id || null
+  } catch (error) {
+    console.error(error)
+  } finally {
+    historyLoading.value = false
   }
 }
 
@@ -726,6 +897,8 @@ watch(() => route.params.id, async (newId) => {
   if (newId && typeof newId === 'string') {
     if (newId === conversationId.value && messages.value.length > 0) return
     conversationId.value = newId
+    historyHasMore.value = false
+    historyCursor.value = null
     isLoading.value = true
     await fetchMessages()
     // 加载完成后根据消息数量决定是否显示欢迎语
@@ -735,6 +908,8 @@ watch(() => route.params.id, async (newId) => {
     if (!sending.value) {
       messages.value = []
       conversationId.value = ''
+      historyHasMore.value = false
+      historyCursor.value = null
       showWelcome.value = true
     }
   }
@@ -1117,9 +1292,14 @@ onUnmounted(() => {
             <n-icon :size="18"><CreateOutline /></n-icon>
             <span>新建会话</span>
           </div>
+          <div class="new-chat-btn new-chat-btn-shift batch-toggle-btn" @click="toggleBatchMode">
+            <n-icon :size="18"><TrashOutline /></n-icon>
+            <span>{{ batchMode ? '取消批删' : '批量删除' }}</span>
+          </div>
           
           <div class="sidebar-menu-header">
             <span>会话列表</span>
+            <span v-if="batchMode" class="batch-counter">已选 {{ selectedConversationIds.length }}</span>
           </div>
         </div>
         
@@ -1131,8 +1311,17 @@ onUnmounted(() => {
               :key="convo.id"
               class="history-item"
               :class="{ active: convo.id === conversationId }"
-              @click="handleSelectChat(convo.id)"
+              @click="batchMode ? toggleConversationSelect(convo.id) : handleSelectChat(convo.id)"
             >
+              <n-checkbox
+                v-if="batchMode"
+                :checked="selectedConversationIds.includes(convo.id)"
+                @update:checked="() => toggleConversationSelect(convo.id)"
+                @click.stop
+              />
+              <n-icon v-if="convo.is_pinned" :size="14" class="history-pin">
+                <PinOutline />
+              </n-icon>
               <span class="history-title">{{ convo.title || '新会话' }}</span>
               <n-dropdown 
                 :options="chatOptions" 
@@ -1145,6 +1334,10 @@ onUnmounted(() => {
                 </div>
               </n-dropdown>
             </div>
+          </div>
+          <div v-if="batchMode" class="batch-action-bar">
+            <button class="pill rename-save-btn" @click="handleBatchDelete">删除选中</button>
+            <button class="pill" @click="toggleBatchMode">取消</button>
           </div>
         </div>
         
@@ -1281,11 +1474,13 @@ onUnmounted(() => {
                   align="left"
                   :actions="[
                     { key: 'copy', title: '复制', icon: CopyOutline },
+                    { key: 'feedback', title: '反馈', icon: ChatboxEllipsesOutline },
                     { key: 'retry', title: '重新生成', icon: RefreshOutline },
                     { key: 'delete', title: '删除', icon: TrashOutline }
                   ]"
                   @trigger="(key) => {
                     if (key === 'copy') copyMessage(msg.content)
+                    else if (key === 'feedback') openFeedbackForMessage(msg)
                     else if (key === 'retry') regenerateMessage(index)
                     else if (key === 'delete') deleteMessage(index)
                   }"
@@ -1496,6 +1691,26 @@ onUnmounted(() => {
         <div class="rename-actions">
           <button class="pill" @click="showRenameModal = false">取消</button>
           <button class="pill rename-save-btn" @click="submitRename">保存</button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="showFeedbackModal" preset="dialog" title="提交反馈">
+      <div class="feedback-form">
+        <div class="feedback-label">满意度评分</div>
+        <n-rate v-model:value="feedbackRating" />
+        <div class="feedback-label mt-3">补充说明（可选）</div>
+        <n-input
+          v-model:value="feedbackComment"
+          type="textarea"
+          :autosize="{ minRows: 3, maxRows: 5 }"
+          placeholder="请告诉我们哪里可以做得更好"
+        />
+      </div>
+      <template #action>
+        <div class="rename-actions">
+          <button class="pill" @click="showFeedbackModal = false">取消</button>
+          <button class="pill rename-save-btn" @click="submitFeedback">提交</button>
         </div>
       </template>
     </n-modal>
@@ -2898,6 +3113,40 @@ onUnmounted(() => {
 .rename-save-btn {
   background: var(--ds-brand);
   color: #fff;
+}
+
+.batch-toggle-btn {
+  margin-top: 8px;
+}
+
+.batch-counter {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.history-pin {
+  color: var(--ds-brand);
+  margin-right: 4px;
+}
+
+.batch-action-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 6px 0;
+}
+
+.feedback-form {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feedback-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 /* ===== 回到底部按钮 ===== */

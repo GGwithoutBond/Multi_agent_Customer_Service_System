@@ -6,7 +6,7 @@ import enum
 import uuid
 from typing import Optional
 
-from sqlalchemy import String, Enum, ForeignKey, Text
+from sqlalchemy import Boolean, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +58,7 @@ class Conversation(Base, UUIDMixin, TimestampMixin):
         Enum(ConversationStatus), default=ConversationStatus.ACTIVE, nullable=False, index=True
     )
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True, default=dict)
 
     # 关联

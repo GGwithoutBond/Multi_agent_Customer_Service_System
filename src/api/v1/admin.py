@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import require_admin_user, require_current_user
 from src.core.config import get_settings
+from src.core.logging import get_logger
 from src.database.session import get_db_session
 from src.schemas.common import HealthCheckResponse, ResponseWithData
 from src.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
 
 router = APIRouter(tags=["管理"])
+logger = get_logger(__name__)
 
 
 @router.get("/health", response_model=HealthCheckResponse)
@@ -183,11 +185,29 @@ async def get_model_logs(
 
     data = []
     for msg in messages:
+        user_prompt_stmt = (
+            select(Message)
+            .where(
+                Message.conversation_id == msg.conversation_id,
+                Message.role == MessageRole.USER,
+                Message.created_at <= msg.created_at,
+            )
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        user_prompt_res = await db.execute(user_prompt_stmt)
+        user_message = user_prompt_res.scalar_one_or_none()
+        metadata = msg.metadata_ or {}
+
         data.append({
             "id": str(msg.id),
             "timestamp": msg.created_at.strftime("%Y-%m-%d %H:%M:%S") if msg.created_at else "",
             "modelName": msg.worker_type or "unknown",
-            "promptSnippet": "关联的提示词请在会话中查看", # 简化处理，不连表查询上文
+            "conversationId": str(msg.conversation_id),
+            "intent": msg.intent or "unknown",
+            "workerType": msg.worker_type or "unknown",
+            "traceId": metadata.get("trace_id") or "",
+            "promptSnippet": (user_message.content[:120] + "...") if user_message and len(user_message.content) > 120 else (user_message.content if user_message else ""),
             "outputSnippet": msg.content[:100] + "..." if len(msg.content) > 100 else msg.content,
             "tokens": msg.tokens_used or 0,
             "latency": msg.latency_ms or 0
@@ -223,7 +243,7 @@ async def get_middleware_status(
         used_memory = info.get("used_memory", 0)
         redis_status["memoryPercentage"] = min(100, int((used_memory / (1024 * 1024 * 1024)) * 100))
     except Exception as e:
-        print(f"获取 Redis 状态失败: {e}")
+        logger.warning("Failed to fetch redis status: %s", e)
 
     # Postgres Status
     pg_status = {"status": "unhealthy", "activeConnections": 0, "maxConnections": 100, "databaseSize": "0MB", "queriesPerSecond": 0}
@@ -242,7 +262,7 @@ async def get_middleware_status(
 
         pg_status["status"] = "healthy"
     except Exception as e:
-        print(f"获取 PostgreSQL 状态失败: {e}")
+        logger.warning("Failed to fetch postgres status: %s", e)
 
     return {
         "status": "success",
@@ -275,7 +295,7 @@ async def get_rag_status(
         rag_data["vector_store"]["dimension"] = vs.settings.EMBEDDING_DIMENSION
         rag_data["vector_store"]["total_vectors"] = collection.num_entities
     except Exception as e:
-        print(f"获取 RAG Milvus 状态失败: {e}")
+        logger.warning("Failed to fetch rag milvus status: %s", e)
 
     # 拉取 Neo4j 数据
     try:
@@ -294,7 +314,7 @@ async def get_rag_status(
         rag_data["graph_store"]["total_relations"] = total_relations
         await gs.close()
     except Exception as e:
-        print(f"获取 RAG Neo4j 状态失败: {e}")
+        logger.warning("Failed to fetch rag neo4j status: %s", e)
 
     return {
         "status": "success",

@@ -8,6 +8,10 @@ interface ModelLog {
   id: string
   timestamp: string
   modelName: string
+  conversationId: string
+  intent: string
+  workerType: string
+  traceId: string
   promptSnippet: string
   outputSnippet: string
   tokens: number
@@ -26,7 +30,7 @@ const columns = [
   {
     title: '模型名称',
     key: 'modelName',
-    width: 120,
+    width: 130,
     render(row: ModelLog) {
       const typeMap: Record<string, 'info' | 'success' | 'warning' | 'error'> = {
         'gpt-4': 'success',
@@ -35,6 +39,23 @@ const columns = [
       }
       const tagType = typeMap[row.modelName] || 'default'
       return h(NTag, { type: tagType as any, round: true, size: 'small' }, { default: () => row.modelName })
+    }
+  },
+  {
+    title: '会话ID',
+    key: 'conversationId',
+    width: 150,
+    ellipsis: { tooltip: true }
+  },
+  {
+    title: '意图/Worker',
+    key: 'workerType',
+    width: 150,
+    render(row: ModelLog) {
+      return h('div', { class: 'flex flex-col gap-0.5' }, [
+        h('span', { class: 'text-xs text-slate-600' }, row.intent || '-'),
+        h('span', { class: 'text-xs text-slate-400' }, row.workerType || '-')
+      ])
     }
   },
   {
@@ -65,6 +86,12 @@ const columns = [
       
       return h('span', { class: `font-mono ${colorClass}` }, `${row.latency}ms`)
     }
+  },
+  {
+    title: 'Trace ID',
+    key: 'traceId',
+    width: 130,
+    ellipsis: { tooltip: true }
   }
 ]
 

@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    ALLOWED_ORIGINS: list[str] = ["*"]
+    ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
     API_RATE_LIMIT: int = 60  # 每分钟请求数
     UPLOAD_RATE_LIMIT_PER_MINUTE: int = 20
     WS_CONNECT_RATE_LIMIT_PER_MINUTE: int = 12
@@ -174,6 +177,31 @@ class Settings(BaseSettings):
                 return False
             return False
         return False
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, value):
+        """Parse ALLOWED_ORIGINS from comma-separated strings or JSON-like lists."""
+        if value is None:
+            return [
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+            ]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith("[") and text.endswith("]"):
+                # Supports values such as ["http://a","http://b"] in env.
+                inner = text[1:-1].strip()
+                if not inner:
+                    return []
+                parts = [p.strip().strip('"').strip("'") for p in inner.split(",")]
+                return [p for p in parts if p]
+            return [part.strip() for part in text.split(",") if part.strip()]
+        return []
 
     @model_validator(mode="after")
     def validate_secret_key_security(self):
