@@ -1254,6 +1254,16 @@ const handleSend = async (options: SendOptions = {}) => {
             if (data.message_id) {
               messages.value[aiMessageIndex].message_id = data.message_id
             }
+            // 后端返回了自动生成的标题，直接更新侧边栏，避免等待重新拉取列表
+            if (data.title && streamConversationId) {
+              const existing = conversations.value.find((c: any) => c.id === streamConversationId)
+              if (existing) {
+                existing.title = data.title
+              } else {
+                // 新会话尚未在列表中，触发一次列表刷新
+                void fetchConversationList()
+              }
+            }
           } else if (data.type === 'action_buttons' && data.actions) {
             if (data.content) {
               messages.value[aiMessageIndex].actionButtonPrompt = data.content

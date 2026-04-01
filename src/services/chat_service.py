@@ -435,6 +435,21 @@ class ChatService:
             last_message_ts = ai_msg.created_at
             ai_msg = await self.msg_repo.create(ai_msg)
 
+            # 生成会话标题（首轮对话）并随 done 事件返回给前端
+            generated_title: Optional[str] = None
+            if not conversation.title:
+                try:
+                    await self._finalize_first_turn_summary(
+                        conversation=conversation,
+                        user_message=message,
+                        assistant_message=full_response,
+                    )
+                    # 读取刚写入的标题
+                    updated_conv = await self.conv_repo.get_by_id(conversation.id)
+                    generated_title = getattr(updated_conv, "title", None) or None
+                except Exception as title_exc:
+                    logger.warning("标题生成失败（不影响主流程）: %s", title_exc)
+
             review_state = {
                 "intent": detected_intent,
                 "worker_type": detected_worker_type,
@@ -449,7 +464,7 @@ class ChatService:
             elif QualityAgent.should_run_async_review(review_state):
                 asyncio.create_task(self._run_async_quality_review(review_state))
 
-            yield ChatStreamChunk(type="done", message_id=ai_msg.id)
+            yield ChatStreamChunk(type="done", message_id=ai_msg.id, title=generated_title)
             if settings.ENABLE_ASYNC_POSTPROCESS:
                 asyncio.create_task(
                     self._run_stream_postprocess(

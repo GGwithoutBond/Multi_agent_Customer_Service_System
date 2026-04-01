@@ -1,4 +1,4 @@
-﻿"""
+"""
 Chat-related schemas.
 """
 
@@ -60,6 +60,7 @@ class ChatStreamChunk(BaseModel):
         None,
         description="stream metrics such as route_ms / worker_ms / ttfc_ms",
     )
+    title: Optional[str] = Field(None, description="auto-generated conversation title (sent in done event)")
 
 
 class WebSocketMessage(BaseModel):
