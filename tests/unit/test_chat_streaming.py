@@ -63,6 +63,9 @@ async def test_stream_emits_meta_with_conversation_id(mock_get_settings):
     assert any(chunk.type == "chunk" for chunk in chunks)
     assert chunks[-1].type == "done"
     assert chunks[-1].message_id == done_message_id
+    user_created_at = service.msg_repo.create.await_args_list[0].args[0].created_at
+    assistant_created_at = service.msg_repo.create.await_args_list[1].args[0].created_at
+    assert user_created_at < assistant_created_at
 
 
 @pytest.mark.asyncio
@@ -243,3 +246,6 @@ async def test_stream_normal_uses_async_quality_review(
     assert service._run_async_quality_review.await_count == 0
     # async quality review + async postprocess
     assert mock_create_task.call_count == 2
+    user_created_at = service.msg_repo.create.await_args_list[0].args[0].created_at
+    assistant_created_at = service.msg_repo.create.await_args_list[1].args[0].created_at
+    assert user_created_at < assistant_created_at

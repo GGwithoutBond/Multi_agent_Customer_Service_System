@@ -7,6 +7,7 @@
 import asyncio
 import re
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, List, Optional
 from uuid import UUID
 
@@ -48,6 +49,17 @@ class ChatService:
         self.semantic_cache = SemanticCache()
         self.summary_agent = SummaryAgent()
 
+    @staticmethod
+    def _next_message_ts(last_ts: Optional[datetime]) -> datetime:
+        """Return a strictly monotonic UTC timestamp for message writes."""
+        now = datetime.now(timezone.utc)
+        if last_ts is None:
+            return now
+        if last_ts.tzinfo is None:
+            last_ts = last_ts.replace(tzinfo=timezone.utc)
+        min_next = last_ts + timedelta(microseconds=1)
+        return now if now > min_next else min_next
+
     async def process_message(
         self,
         message: str,
@@ -61,6 +73,7 @@ class ChatService:
         处理用户消息（同步模式）
         """
         start_time = time.time()
+        last_message_ts: Optional[datetime] = None
 
         # 1. 获取或创建会话
         conversation = await self._get_or_create_conversation(
@@ -76,7 +89,9 @@ class ChatService:
             role=MessageRole.USER,
             content=message,
             metadata_=msg_metadata if msg_metadata else None,
+            created_at=self._next_message_ts(last_message_ts),
         )
+        last_message_ts = user_msg.created_at
         user_msg = await self.msg_repo.create(user_msg)
 
         try:
@@ -144,7 +159,9 @@ class ChatService:
                 worker_type=worker_type,
                 tokens_used=tokens_used,
                 latency_ms=latency_ms,
+                created_at=self._next_message_ts(last_message_ts),
             )
+            last_message_ts = ai_msg.created_at
             ai_msg = await self.msg_repo.create(ai_msg)
 
             # 7. 更新记忆（含用户画像自动提取）
@@ -178,6 +195,7 @@ class ChatService:
                 role=MessageRole.ASSISTANT,
                 content=error_text,
                 latency_ms=int((time.time() - start_time) * 1000),
+                created_at=self._next_message_ts(last_message_ts),
             )
             await self.msg_repo.create(error_msg)
             raise AgentError(f"消息处理失败: {e}")
@@ -197,6 +215,7 @@ class ChatService:
         优化 2.1: 使用 LLM streaming 在 response_generator 阶段逐 token 输出
         """
         start_time = time.time()
+        last_message_ts: Optional[datetime] = None
 
         # 获取或创建会话
         conversation = await self._get_or_create_conversation(
@@ -215,7 +234,9 @@ class ChatService:
             role=MessageRole.USER,
             content=message,
             metadata_=msg_metadata if msg_metadata else None,
+            created_at=self._next_message_ts(last_message_ts),
         )
+        last_message_ts = user_msg.created_at
         await self.msg_repo.create(user_msg)
 
         try:
@@ -249,7 +270,9 @@ class ChatService:
                         worker_type="cache",
                         tokens_used=count_tokens(message) + count_tokens(cached_res),
                         latency_ms=int((time.time() - start_time) * 1000),
+                        created_at=self._next_message_ts(last_message_ts),
                     )
+                    last_message_ts = ai_msg.created_at
                     ai_msg = await self.msg_repo.create(ai_msg)
                     yield ChatStreamChunk(type="done", message_id=ai_msg.id)
                     if settings.ENABLE_ASYNC_POSTPROCESS:
@@ -407,7 +430,9 @@ class ChatService:
                 tokens_used=tokens_used,
                 latency_ms=latency_ms,
                 metadata_=ai_msg_metadata if ai_msg_metadata else None,
+                created_at=self._next_message_ts(last_message_ts),
             )
+            last_message_ts = ai_msg.created_at
             ai_msg = await self.msg_repo.create(ai_msg)
 
             review_state = {

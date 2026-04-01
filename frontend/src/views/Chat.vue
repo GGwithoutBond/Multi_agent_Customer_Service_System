@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog, NIcon, NAvatar, NInput, NTag, NDropdown, NDrawer, NDrawerContent, NModal, NRate, NCheckbox } from 'naive-ui'
@@ -263,9 +263,8 @@ const finalizeAssistantMessage = (msg: any) => {
   if (!msg || msg.role !== 'assistant') return
   const text = (msg.content || '').trim()
   if (!text) return
-  const blocks = parseStructuredBlocks(text)
-  msg.structuredBlocks = blocks
-  msg.renderedHtml = blocks.length ? '' : renderMarkdown(text)
+  msg.structuredBlocks = []
+  msg.renderedHtml = renderMarkdown(text)
 }
 
 const conversationId = ref<string>('')
@@ -1475,14 +1474,16 @@ onUnmounted(() => {
         
         <!-- Fixed Top Section inside scrollable content area -->
         <div class="sidebar-top-section">
-          <!-- 第一个大按钮 -->
-          <div class="new-chat-btn new-chat-btn-shift" @click="handleNewChat">
-            <n-icon :size="18"><CreateOutline /></n-icon>
-            <span>新建会话</span>
-          </div>
-          <div class="new-chat-btn new-chat-btn-shift batch-toggle-btn" @click="toggleBatchMode">
-            <n-icon :size="18"><TrashOutline /></n-icon>
-            <span>{{ batchMode ? '取消批删' : '批量删除' }}</span>
+          <div class="sidebar-actions">
+            <!-- 第一个大按钮 -->
+            <div class="new-chat-btn new-chat-btn-shift" @click="handleNewChat">
+              <n-icon :size="18"><CreateOutline /></n-icon>
+              <span>新建会话</span>
+            </div>
+            <div class="new-chat-btn new-chat-btn-shift batch-toggle-btn" @click="toggleBatchMode">
+              <n-icon :size="18"><TrashOutline /></n-icon>
+              <span>{{ batchMode ? '取消批删' : '批量删除' }}</span>
+            </div>
           </div>
           
           <div class="sidebar-menu-header">
@@ -1557,7 +1558,7 @@ onUnmounted(() => {
         <!-- Bottom Settings & Avatar -->
         <div class="sidebar-bottom">
           <div class="sidebar-menu-item sidebar-profile-item">
-            <n-avatar round :size="24" class="user-avatar user-avatar-pill">{{ userName.slice(0, 1) }}</n-avatar>
+            <n-avatar round :size="24" class="user-avatar user-avatar-pill" style="font-size: 16px; background-color: transparent;">😀</n-avatar>
             <span class="sidebar-user-name">{{ userName }}</span>
           </div>
 
@@ -1610,8 +1611,8 @@ onUnmounted(() => {
           <div v-for="(msg, index) in messages" :key="index" class="message-row" :class="msg.role">
             <!-- Avatar for AI -->
             <div class="message-avatar" v-if="msg.role === 'assistant'">
-              <n-avatar :size="30" round class="ai-avatar">
-                <n-icon><SendOutline /></n-icon>
+              <n-avatar :size="30" round class="ai-avatar" style="font-size: 20px; background-color: transparent;">
+                🤖
               </n-avatar>
             </div>
 
@@ -1724,7 +1725,7 @@ onUnmounted(() => {
 
             <!-- Avatar for User -->
             <div class="message-avatar" v-if="msg.role === 'user'">
-              <n-avatar :size="30" round class="user-avatar user-avatar-pill">{{ userName.slice(0, 1) }}</n-avatar>
+              <n-avatar :size="30" round class="user-avatar user-avatar-pill" style="font-size: 20px; background-color: transparent;">😀</n-avatar>
             </div>
 
             <MessageActionBar
@@ -2155,6 +2156,27 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.sidebar-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
+.sidebar-actions .new-chat-btn {
+  margin-bottom: 0;
+  flex: 1;
+  justify-content: center;
+}
+.sidebar-wrapper.is-collapsed .sidebar-actions {
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.sidebar-wrapper.is-collapsed .sidebar-actions .new-chat-btn {
+  margin: 0 auto;
+}
+
 .chat-history-container {
   flex: 1;
   overflow-y: auto;
@@ -2195,6 +2217,9 @@ onUnmounted(() => {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 8px 12px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .history-empty-state {
@@ -2219,6 +2244,8 @@ onUnmounted(() => {
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .new-chat-btn:hover {
@@ -2237,6 +2264,8 @@ onUnmounted(() => {
   cursor: pointer;
   margin-bottom: 8px;
   transition: background-color 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .sidebar-menu-item:hover {
@@ -2251,6 +2280,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .sidebar-menu-header.mt-4 {
   margin-top: 16px;
@@ -3512,19 +3543,21 @@ onUnmounted(() => {
 }
 
 .stop-btn {
-  border: none;
+  border: 1px solid var(--text-secondary);
   border-radius: 999px;
-  padding: 9px 14px;
+  padding: 8px 14px;
   font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #f29900, #ff7a59);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-color);
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .stop-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(242, 153, 0, 0.35);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--text-primary);
 }
 
 .rename-input-wrap {
@@ -3542,7 +3575,7 @@ onUnmounted(() => {
 }
 
 .batch-toggle-btn {
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .batch-counter {
