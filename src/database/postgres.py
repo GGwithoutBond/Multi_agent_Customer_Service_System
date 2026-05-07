@@ -6,6 +6,7 @@ PostgreSQL 数据库连接管理
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from src.core.config import get_settings
 from src.core.logging import get_logger
@@ -20,13 +21,28 @@ def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
         settings = get_settings()
+        engine_kwargs = {
+            "echo": settings.DEBUG,
+        }
+
+        if settings.ENVIRONMENT == "development":
+            # Avoid reusing polluted asyncpg connections during local dev.
+            engine_kwargs["poolclass"] = NullPool
+        else:
+            engine_kwargs.update(
+                pool_size=20,
+                max_overflow=10,
+                # asyncpg's ping opens a transaction; if a checked-in connection
+                # already has manual transaction state, pre_ping can raise
+                # "cannot use Connection.transaction() in a manually started transaction".
+                pool_pre_ping=False,
+                pool_reset_on_return="rollback",
+                pool_recycle=3600,
+            )
+
         _engine = create_async_engine(
             settings.DATABASE_URL,
-            echo=settings.DEBUG,
-            pool_size=20,
-            max_overflow=10,
-            pool_pre_ping=True,
-            pool_recycle=3600,
+            **engine_kwargs,
         )
     return _engine
 

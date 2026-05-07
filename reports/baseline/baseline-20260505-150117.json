@@ -1,0 +1,541 @@
+{
+  "generated_at": "2026-05-05 15:01:17",
+  "dataset": "C:\\Users\\1\\Desktop\\multi-agent\\agent-system\\data\\eval_queries\\baseline_product_qa.json",
+  "modes": [
+    "single_agent",
+    "rag_baseline",
+    "current_system"
+  ],
+  "summary": {
+    "single_agent": {
+      "total": 10,
+      "success_rate": 1.0,
+      "correct_rate": 0.2,
+      "avg_latency_ms": 4102.2,
+      "avg_vector_hits": 0,
+      "avg_graph_hits": 0,
+      "failed_samples": [
+        {
+          "query_id": "iphone16promax_price",
+          "status": "ok",
+          "correct": false,
+          "error": null
+        },
+        {
+          "query_id": "mate70_chip",
+          "status": "ok",
+          "correct": false,
+          "error": null
+        },
+        {
+          "query_id": "xiaomi15_screen",
+          "status": "ok",
+          "correct": false,
+          "error": null
+        },
+        {
+          "query_id": "oppo_x8_ultra_battery",
+          "status": "ok",
+          "correct": false,
+          "error": null
+        },
+        {
+          "query_id": "oneplus_store",
+          "status": "ok",
+          "correct": false,
+          "error": null
+        }
+      ]
+    },
+    "rag_baseline": {
+      "total": 10,
+      "success_rate": 1.0,
+      "correct_rate": 1.0,
+      "avg_latency_ms": 2555.1,
+      "avg_vector_hits": 5,
+      "avg_graph_hits": 0,
+      "failed_samples": []
+    },
+    "current_system": {
+      "total": 10,
+      "success_rate": 1.0,
+      "correct_rate": 0.9,
+      "avg_latency_ms": 19492.5,
+      "avg_vector_hits": 5,
+      "avg_graph_hits": 0.3,
+      "failed_samples": [
+        {
+          "query_id": "oppo_x8_ultra_battery",
+          "status": "ok",
+          "correct": false,
+          "error": null
+        }
+      ]
+    }
+  },
+  "results": [
+    {
+      "mode": "single_agent",
+      "query_id": "iphone16promax_price",
+      "query": "Apple iPhone 16 Pro Max 256GB 的价格是多少？",
+      "answer": "亲爱的小伙伴，你好呀！😊 关于你问的 Apple iPhone 16 Pro Max 256GB 的价格，目前我这边知识库还没有收录最新的官方定价信息呢～不过根据一般经验，苹果新款旗舰机型的定价通常会参考前代产品的价格区间，256GB 版本一般会比基础存储版本贵一些哦。\n\n建议你可以：\n1. **直接访问苹果官网**或官方授权渠道查看最新报价 🌟\n2. 或者告诉我你所在的地区（比如中国、美国等），我可以帮你根据常见的市场价做参考 💖\n\n如果还有其他问题，随时找我聊聊，我会一直在这里陪着你的！🤗",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 13794,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "mate70_chip",
+      "query": "华为 Mate 70 Pro+ 256GB 用的是什么芯片？",
+      "answer": "哎呀，您问的这个问题可真是紧跟潮流呀！😊 根据一般经验，华为 Mate 70 Pro+ 作为旗舰机型，大概率会搭载华为自家的最新旗舰芯片——麒麟系列。不过，具体的芯片型号（比如麒麟9010或后续的升级版）需要等华为官方正式发布后才能确认哦～🌟\n\n如果您想了解更详细的参数，建议关注华为官网或发布会信息，毕竟官方公布的数据才最准确！如果还有其他问题，比如价格、颜色之类的，随时问我，我帮您一起研究～💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2268,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "xiaomi15_screen",
+      "query": "小米15 Pro 256GB 的屏幕规格是什么？",
+      "answer": "哎呀，这个问题可难不倒我小鹏啦！😊 虽然我这边没有专门的小米15 Pro 256GB的详细知识库，但根据一般经验，我可以为你梳理一下这款手机的屏幕规格，供你参考哦～\n\n**小米15 Pro 256GB 的屏幕规格（根据一般经验）：**\n- **尺寸**：约6.73英寸（AMOLED曲面屏）  \n- **分辨率**：2K级别（3200×1440像素），显示效果非常细腻 🌟  \n- **刷新率**：支持120Hz动态刷新率，滑动流畅又省电  \n- **亮度**：峰值亮度可达1500尼特以上，阳光下也能看清  \n- **其他特性**：支持HDR10+、杜比视界，色彩鲜艳真实，还可能有高频PWM调光（护眼模式）  \n\n不过，不同批次或地区版本可能略有差异哦～如果你需要最准确的官方数据，建议去小米官网或查看产品包装盒上的参数标签。要是还有其他疑问，比如想对比其他型号或者聊聊使用体验，随时找我！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 3816,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "oppo_x8_ultra_battery",
+      "query": "OPPO Find X8 Ultra 512GB 的电池和快充怎么样？",
+      "answer": "哎呀，亲爱的用户，您问的这款OPPO Find X8 Ultra 512GB的电池和快充，真是戳中了手机续航的小心脏呢！💖 根据一般经验，OPPO在旗舰机型上通常都会搭载大容量电池和超快闪充技术，比如5000mAh左右的电池和100W甚至更高的超级闪充，配合智能温控和电池健康引擎，日常使用一整天基本没问题，充电速度也能让你“喝杯咖啡就满血复活”☕⚡。\n\n不过具体到Find X8 Ultra的官方参数，我这边暂时没有最准确的内部数据呢😅。建议您直接查看OPPO官网或线下体验店，那里会有最权威的电池容量、快充功率和充电时间哦！如果您有更具体的需求，比如想了解充电发热控制、是否支持无线充电，或者对比其他机型，随时告诉我，我会像朋友一样帮您分析～ 🌟",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 3123,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "s25_camera",
+      "query": "三星 Galaxy S25 Ultra 256GB 的主摄像头像素是多少？",
+      "answer": "哈喽～我是您的专属助手小鹏！😊 看到您问三星 Galaxy S25 Ultra 256GB 的主摄像头像素，我来帮您解答～\n\n根据一般经验，三星 Galaxy S25 Ultra 作为旗舰机型，通常会配备顶级的摄像头系统。它的主摄像头像素一般是 **200MP（2亿像素）**，这是三星旗舰机型的常见配置哦～📸✨ 不过，具体参数可能会因版本或地区略有差异，建议您以三星官方发布的信息为准。\n\n如果您还有其他问题，比如拍照功能、存储空间之类的，随时告诉我，小鹏会一直在这里帮您～🌟💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2343,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": true
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "oneplus_store",
+      "query": "一加13 256GB 是哪个店铺的商品？",
+      "answer": "亲爱的小伙伴，感谢你的提问！😊 关于“一加13 256GB”具体是哪个店铺的商品，根据一般经验，这款手机通常会在**一加官方商城**、**京东自营旗舰店**、**天猫官方旗舰店**以及部分授权专卖店销售。不过不同店铺的库存和优惠活动可能不一样哦～\n\n建议你：\n1️⃣ 直接在一加官网或主流电商平台搜索“一加13 256GB”，查看商品详情页的店铺名称。\n2️⃣ 如果是在某个平台看到的活动，可以截图或提供更多线索（比如领券信息、页面颜色等），我帮你一起分析！💡\n\n需要我帮你查具体链接吗？随时告诉我～ 🌟",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2725,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "iphone16_platform",
+      "query": "Apple iPhone 16 128GB 国行正品 是哪个平台的？",
+      "answer": "亲爱的小伙伴，看到你问的这款 iPhone 16 128GB 国行正品，我能感受到你对购买渠道的关心呢～😊\n\n**根据一般经验**，这款手机是苹果官方发布的型号，通常会在以下主流平台销售：\n1. **苹果官网**（Apple Store 在线商店）—— 最保险的正品渠道 ✅\n2. **苹果线下直营店** —— 可现场验机\n3. **京东自营、天猫 Apple 旗舰店** —— 官方授权，售后有保障 🌟\n4. **苏宁易购、拼多多百亿补贴**（需认准“官方授权”标识）\n\n不过呢，你问的“是哪个平台”这个问题，可能是指某个具体活动或店铺的专属商品？如果方便的话，可以告诉我你是在哪里看到这个商品描述的（比如链接、截图或店铺名称），小鹏帮你进一步核实哦～💖\n\n记得购买时一定要确认 **“国行正品”** 的标识，并且索要正规发票，这样用起来才安心呀！如果还有其他疑问，随时告诉我～😊",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 3969,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "pura70_satellite",
+      "query": "华为Pura 70 Ultra 512GB 有卫星通话吗？",
+      "answer": "哈喽呀！我是客服小鹏，很高兴为你服务～ 😊\n\n关于华为Pura 70 Ultra 512GB版本是否支持卫星通话，根据一般经验来回答你：**华为Pura 70 Ultra全系（包括512GB版本）是支持卫星通话功能的**。这款手机配备了卫星通信技术，可以在没有地面网络覆盖的区域（比如深山、海洋等）通过卫星进行语音通话，非常实用哦！🌟\n\n不过，具体功能可能会因运营商、地区或软件版本有细微差异。如果你已经入手了，建议在手机设置里找到“卫星网络”或“应急模式”确认一下；如果还没买，可以咨询官方客服或线下体验店，确保万无一失～ 💖\n\n如果还有其他疑问，或者想聊聊手机的其他亮点（比如拍照、续航），随时告诉我哦！😄",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 3071,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": true
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "lenovo_weight",
+      "query": "联想小新Pro 16 2025 锐龙版 32GB+1TB 重量是多少？",
+      "answer": "亲爱的小伙伴，你好呀！😊 关于联想小新Pro 16 2025锐龙版（32GB+1TB）的重量，根据一般经验，这款笔记本电脑的重量大约在 **1.9kg 左右**（具体可能因配置和材质略有浮动）。🌟\n\n需要提醒的是，不同批次或定制版本可能会有细微差别，建议以联想官方商城或产品包装上的参数为准哦～如果你还有其他疑问，比如尺寸、续航之类的，随时问我，我超乐意帮你解答！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2071,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "single_agent",
+      "query_id": "hp_screen",
+      "query": "惠普战66七代 锐龙版 16GB+512GB 的屏幕参数是什么？",
+      "answer": "亲爱的小伙伴，你好呀！😊 很高兴为你解答关于惠普战66七代锐龙版的问题～\n\n根据一般经验，惠普战66七代锐龙版（16GB+512GB配置）的屏幕参数通常是这样的：\n\n🌟 **屏幕尺寸**：15.6英寸（部分型号可能为14英寸，建议以具体购买页面为准）  \n🌟 **分辨率**：1920×1080（全高清，FHD）  \n🌟 **刷新率**：60Hz（日常办公、学习完全够用）  \n🌟 **屏幕类型**：IPS防眩光屏（减少反光，长时间看更护眼）  \n🌟 **色域**：一般覆盖100% sRGB（色彩表现不错，适合轻度设计或影音）  \n🌟 **亮度**：约250-300尼特（室内使用足够）  \n\n💡 小提示：不同批次或具体配置可能会有细微差异，如果你有具体订单或想确认更准确的信息，可以告诉我更多细节（比如购买渠道或具体型号后缀），我会帮你进一步核实哦～  \n\n希望这个回答能帮到你！如果还有其他问题，随时找我聊聊呀～ 🌸",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 3842,
+      "worker_type": "faq_worker",
+      "vector_hits": 0,
+      "graph_hits": 0,
+      "retrieval_sources": [],
+      "correct": false
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "iphone16promax_price",
+      "query": "Apple iPhone 16 Pro Max 256GB 的价格是多少？",
+      "answer": "亲爱的小伙伴，感谢你的提问！😊 关于 **Apple iPhone 16 Pro Max 256GB** 的价格，根据我们查到的信息，它的官方售价是 **9999元**（京东Apple官方旗舰店在售）。这款手机配置超棒，搭载A18 Pro芯片、6.9英寸大屏和4800万像素三摄系统，性能非常强大哦！🌟\n\n如果你还有其他问题，比如颜色、存储版本或者购买方式，随时告诉我，我帮你一一解答～ 💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 3446,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "mate70_chip",
+      "query": "华为 Mate 70 Pro+ 256GB 用的是什么芯片？",
+      "answer": "亲爱的小伙伴，你好呀～😊 感谢你对华为 Mate 70 Pro+ 的关注！\n\n关于你问的芯片问题，根据我们可靠的信息源，**华为 Mate 70 Pro+ 256GB** 搭载的是 **麒麟9020** 芯片哦！🌟 这颗芯片性能非常强劲，配合鸿蒙4.0系统，日常使用和游戏体验都会很流畅呢～\n\n如果你还想了解这款手机的屏幕、拍照或者其他配置，随时可以问我，我超乐意帮你解答的！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2451,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "xiaomi15_screen",
+      "query": "小米15 Pro 256GB 的屏幕规格是什么？",
+      "answer": "亲爱的用户，您好呀～😊 感谢您的提问！关于小米15 Pro 256GB的屏幕规格，我为您整理如下：\n\n🌟 **小米15 Pro 256GB 屏幕参数**：\n- **尺寸**：6.73英寸  \n- **类型**：2K AMOLED（支持120Hz高刷新率）  \n- **分辨率**：3200×1440（细腻清晰）  \n- **特点**：采用LTPO技术，智能调节刷新率，更省电流畅～\n\n这块屏幕无论是看视频、玩游戏还是日常使用，色彩和流畅度都非常棒哦！💖 如果您还有其他想了解的，比如摄像头、电池或者价格，随时问我呀～",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2739,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "oppo_x8_ultra_battery",
+      "query": "OPPO Find X8 Ultra 512GB 的电池和快充怎么样？",
+      "answer": "哇，感谢你对OPPO Find X8 Ultra 512GB的关注！😊 让我来给你详细介绍一下它的电池和快充表现～\n\n根据我们掌握的信息，这款手机的电池和快充配置非常给力哦！🌟\n\n**电池容量：** 5800mAh 🪫  \n这个容量真的很大，日常使用一天一充基本没问题，就算你是重度用户（比如打游戏、刷视频），也能轻松撑过一整天～💪\n\n**快充规格：** 100W超级闪充 ⚡  \n100W快充是什么概念呢？简单说就是**充电速度飞快**！一般从0%充到100%，可能只需要半小时左右，早上洗漱的时间就能充个大半，完全不用焦虑电量问题～🚀\n\n**其他亮点：**  \n它还搭配了哈苏影像系统，拍照和续航都很棒，整体体验非常均衡哦！📸\n\n如果你还想知道具体充电时间或者和其他手机对比，随时问我～ 我会一直在这里帮你解答的！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 3462,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "s25_camera",
+      "query": "三星 Galaxy S25 Ultra 256GB 的主摄像头像素是多少？",
+      "answer": "哎呀，这个问题简单！让我来帮你查查～😊\n\n根据我们最新的产品信息，**三星 Galaxy S25 Ultra 256GB** 的主摄像头像素是 **2亿像素**！📸✨ 这可是非常强大的配置，拍出来的照片细节超级丰富，放大看都很清晰哦！\n\n如果你还想了解它的其他规格，比如处理器、屏幕或者AI功能，随时问我，我都很乐意告诉你～🌟",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 1912,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "oneplus_store",
+      "query": "一加13 256GB 是哪个店铺的商品？",
+      "answer": "亲爱的小伙伴，你问的这款 **一加13 256GB** 是在 **京东的「一加官方旗舰店」** 出售的哦！🌟  \n\n这款手机配置超棒，骁龙8至尊版、哈苏三摄、6000mAh大电池+100W快充，价格是 **4299元**，性价比很高呢～ 😊  \n\n如果还有其他问题，比如想了解性能、颜色或者优惠活动，随时告诉我，我帮你慢慢解答！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2217,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "iphone16_platform",
+      "query": "Apple iPhone 16 128GB 国行正品 是哪个平台的？",
+      "answer": "亲爱的小伙伴，感谢你的提问！😊 根据我查到的信息，**Apple iPhone 16 128GB 国行正品** 是来自 **淘宝** 平台的哦～具体是由 **Apple天猫官方旗舰店** 销售的，发货地是上海，价格是 **5199元**。🌟\n\n如果你还想了解这款手机的其他信息，比如颜色、配置或者购买优惠，随时告诉我，我超乐意帮你解答的！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2093,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "pura70_satellite",
+      "query": "华为Pura 70 Ultra 512GB 有卫星通话吗？",
+      "answer": "亲爱的小伙伴，你问的这个问题太棒了！🌟 关于**华为Pura 70 Ultra 512GB**，根据我们掌握的信息，这款手机**是支持卫星通话功能的**哦！📡✨\n\n具体来说，它的规格参数里明确写到了“卫星通话”，所以你可以放心，在户外没有手机信号的紧急情况下，它也能通过卫星保持联系，安全感满满呢！😊\n\n如果你还想了解这款手机的其他亮点，比如它的1英寸主摄+伸缩镜头、麒麟9010芯片，或者想对比一下其他型号（比如华为Mate 70 Pro+），随时问我，我超乐意帮你解答的！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2635,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "lenovo_weight",
+      "query": "联想小新Pro 16 2025 锐龙版 32GB+1TB 重量是多少？",
+      "answer": "亲爱的小伙伴，你问的这款**联想小新Pro 16 2025 锐龙版 32GB+1TB**，它的重量是 **1.89kg** 哦！😊\n\n这个重量在16英寸大屏笔记本里算是非常轻便的了，平时带着去图书馆、咖啡厅或者出差，都不会觉得太沉呢～🌟 而且它还有75Wh的大电池，续航也很给力！\n\n如果你还有其他想了解的，比如屏幕、性能或者价格，随时都可以问我哦！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2071,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "rag_baseline",
+      "query_id": "hp_screen",
+      "query": "惠普战66七代 锐龙版 16GB+512GB 的屏幕参数是什么？",
+      "answer": "亲爱的小伙伴，你好呀～😊 关于你问的惠普战66七代锐龙版（16GB+512GB）的屏幕参数，我来帮你梳理一下哦～\n\n根据我们掌握的信息，这款笔记本的屏幕参数是：  \n**14英寸**，分辨率 **1920x1200**，采用 **IPS** 面板。  \n简单来说，就是一块清晰又色彩不错的屏幕，日常办公、看剧都挺合适的～🌟\n\n如果你还有关于这款电脑的其他问题，比如性能、价格或者购买渠道，随时问我哈！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 2525,
+      "worker_type": "faq_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "iphone16promax_price",
+      "query": "Apple iPhone 16 Pro Max 256GB 的价格是多少？",
+      "answer": "找到啦！来给你详细介绍一下这款超棒的手机～🌟\n\n---\n\n## 📱 Apple iPhone 16 Pro Max 256GB\n\n### 💰 价格\n**官方售价：¥9,999**（京东Apple官方旗舰店）\n\n### 🔥 核心配置一览\n\n| 项目 | 规格 |\n|------|------|\n| 🧠 **芯片** | A18 Pro 仿生芯片（性能超强悍！） |\n| 📺 **屏幕** | 6.9英寸 Super Retina XDR OLED，120Hz ProMotion自适应刷新率 |\n| 📷 **相机** | 4800万主摄 + 1200万超广角 + **1200万5倍光学变焦长焦** |\n| 🔋 **电池** | 4685mAh，支持MagSafe无线充电 |\n| 🎨 **机身** | 钛金属边框，质感拉满！ |\n| 🎨 **颜色选择** | 沙漠钛金色、黑色钛金属、白色钛金属、原色钛金属 |\n| 💾 **存储** | 256GB（还有512GB / 1TB可选） |\n\n### ✨ 核心卖点\n- **A18 Pro芯片**：处理速度无敌，打游戏、剪辑视频都丝滑流畅 🚀\n- **6.9英寸大屏+120Hz**：刷剧看视频体验绝了，视觉盛宴！🎬\n- **4800万三摄系统**：拍照细节惊人，5倍光学变焦拍远处也超清晰 📸\n- **钛金属边框**：更轻更坚固，手感高级又耐用 💎\n- **USB-C接口 & 卫星SOS**：更方便充电，关键时刻还能紧急联络 🆘\n\n### 🎯 适合人群\n追求极致拍照、高性能游戏、专业视频创作的重度用户，或者就是想要一步到位拿当下最强旗舰的朋友！👑\n\n---\n\n**对比小建议**：如果你对拍照和性能不是极致追求，iPhone 16 Pro（非Max）价格会更友好一些；但如果你就想要最大的屏幕、最长的续航和最顶的相机，那 Pro Max 绝对是王者之选！👑\n\n有任何其他问题，比如颜色选择、是否要买AppleCare+，随时问我哦～😊💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 23005,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 1,
+      "retrieval_sources": [
+        "vector",
+        "graph"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "mate70_chip",
+      "query": "华为 Mate 70 Pro+ 256GB 用的是什么芯片？",
+      "answer": "好的，找到了！来给你详细介绍一下～😊\n\n## 华为 Mate 70 Pro+ 256GB 的核心配置\n\n**华为 Mate 70 Pro+ 搭载的是麒麟9020 芯片！** 🚀\n\n这是华为自家研发的最新旗舰级处理器，性能非常强劲，配合鸿蒙4.0系统，日常使用、多任务处理、大型游戏都能流畅运行～\n\n### 其他亮点配置一览 🌟\n\n| 配置项 | 参数 |\n|-------|------|\n| 💰 **价格** | **8,999元** |\n| 📱 **屏幕** | 6.9英寸 LTPO OLED，120Hz高刷，2832×1316分辨率 |\n| 📷 **后置三摄** | 5000万主摄 + 4000万超广角 + 4800万长焦（支持10倍光学变焦） |\n| 🔋 **电池** | 5100mAh + **100W有线快充** + 50W无线快充 |\n| 🛰️ **特色功能** | 卫星通话、昆仑玻璃、IP68防水 |\n| 🎨 **颜色** | 雅丹黑、星河银、冰晶蓝、昆仑霞光 |\n| 💾 **存储版本** | 256GB / 512GB / 1TB 可选 |\n\n### 适用人群 🎯\n这款手机非常适合 **华为生态用户** 和 **商务人士**，尤其是卫星通话功能，在没信号的户外也能保持联系，安全感满满！\n\n---\n\n如果您对性能要求更高，或者想对比一下，同价位还有 **华为Pura 70 Ultra（7,999元）**，它搭载的是麒麟9010芯片，主摄更厉害（1英寸大底+伸缩镜头），拍照党可以关注一下哦～\n\n您是想了解更多 Mate 70 Pro+ 的细节，还是想和其他机型做对比呢？随时问我！😊💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 10347,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "xiaomi15_screen",
+      "query": "小米15 Pro 256GB 的屏幕规格是什么？",
+      "answer": "找到啦！下面是小鹏为你整理的小米15 Pro 256GB的屏幕规格信息，快来看看吧～🌟\n\n---\n\n## 📱 小米15 Pro 256GB — 屏幕规格\n\n| 项目 | 规格 |\n|------|------|\n| **屏幕尺寸** | **6.73英寸** |\n| **屏幕类型** | **2K LTPO AMOLED** |\n| **分辨率** | **3200 × 1440**（2K超清） |\n| **刷新率** | **120Hz**（自适应高刷） |\n| **显示特点** | LTPO技术，支持智能动态刷新率调节 |\n\n### 💡 小鹏的贴心解读：\n\n1. **6.73英寸大屏** 🖥️ — 看视频、玩游戏视野超开阔，握持感也很舒适～\n2. **2K分辨率（3200×1440）** ✨ — 画质细腻到连毛孔都能看清！追剧、刷图都是一种享受。\n3. **120Hz高刷新率** 🚀 — 滑动页面、切换应用丝滑流畅，眼睛看着特别舒服。\n4. **LTPO AMOLED** 🌈 — 色彩鲜艳饱满，黑色深邃纯净，而且还能根据内容智能调节刷新率，**既省电又流畅**！\n\n---\n\n### 🎯 总结一下\n\n小米15 Pro这块屏幕可以说是**旗舰级水准**，无论是日常刷短视频、看高清电影，还是玩高帧率游戏，体验都非常棒！再加上**徕卡三摄、骁龙8至尊版芯片、5400mAh大电池+120W快充**，整机配置非常均衡强大～\n\n💰 **价格：4999元**，性价比很高哦！\n\n还有其他想了解的吗？比如拍照、性能或者和其他机型对比，都可以问我哟～😊💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 10784,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "oppo_x8_ultra_battery",
+      "query": "OPPO Find X8 Ultra 512GB 的电池和快充怎么样？",
+      "answer": "好的，找到啦！我来给你详细讲讲 OPPO Find X8 Ultra 512GB 的电池和快充表现 👇\n\n---\n\n## 🔋 电池容量：5800mAh 超大电池\n\n这款手机配备了一块 **5800mAh** 的大容量电池，这个容量在目前的旗舰机里属于**第一梯队**的水平！🌟\n\n你可以想象一下：\n- 📱 **日常使用**：正常刷微信、看视频、听音乐，轻松撑过 **一整天半到两天**\n- 🎮 **重度使用**：打游戏、拍视频、导航，也能稳稳支撑 **一整天**\n- 出门基本不用带充电宝，安全感满满 💪\n\n---\n\n## ⚡ 快充规格：100W 超级闪充\n\n充电速度更是猛！支持 **100W 有线超级闪充**，这是什么概念呢？👇\n\n- 🔌 **充 10 分钟** → 大概能充到 **50% 左右**，应急超给力\n- 🔌 **充满 0% → 100%** → 大约只要 **25~30 分钟** 🚀\n- 🛌 早上起床发现忘了充电？刷个牙洗个脸的功夫，手机就满血复活啦！\n\n> 相比标准版 Find X8 的 **5630mAh + 80W** 快充，Ultra 版本在**电池容量和充电速度上都更进一步**，体验更旗舰！✨\n\n---\n\n## 💰 价格参考\n\n**OPPO Find X8 Ultra 512GB** 售价为 **6499 元**，目前在 **OPPO 官方旗舰店**（京东/天猫）都能买到。\n\n---\n\n### 🎯 总结一下亮点\n\n| 项目 | 参数 | 一句话感受 |\n|------|------|-----------|\n| 电池 | 5800mAh | 续航超持久，告别电量焦虑 |\n| 快充 | 100W 超级闪充 | 半小时满血，速度飞快 |\n\n再加上它搭载的 **天玑9400 旗舰芯片**、**6.78英寸2K LTPO OLED屏幕** 和 **哈苏影像系统**，妥妥的全能旗舰机皇！📱✨\n\n还有什么想了解的吗？比如拍照、性能或者和其他机型对比，我都可以帮你详细解答哦～😊",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 11986,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": false
+    },
+    {
+      "mode": "current_system",
+      "query_id": "s25_camera",
+      "query": "三星 Galaxy S25 Ultra 256GB 的主摄像头像素是多少？",
+      "answer": "来啦来啦！让我为您详细介绍一下这款旗舰机皇的摄像头配置 📱✨\n\n## 三星 Galaxy S25 Ultra 256GB 主摄像头像素\n\n**答案是：2亿像素！** 🎯\n\n没错，三星 Galaxy S25 Ultra 的主摄像头搭载了一颗 **2亿像素** 的超高分辨率传感器，这可是目前手机行业的天花板级别配置哦！🌟\n\n### 📸 完整摄像头系统一览\n\n除了这颗超强的 **2亿像素主摄** 外，S25 Ultra 还配备了多颗专业级镜头，组成了一套全能影像系统：\n\n| 摄像头 | 像素 | 功能 |\n|--------|:----:|:----:|\n| 🔴 **主摄像头** | **2亿像素** | 超高解析力，细节满满 |\n| 🟢 超广角 | 1200万像素 | 大场景、风景照 |\n| 🔵 长焦（3x） | 1000万像素 | 人像、中距离拍摄 |\n| 🟣 长焦（5x/10x） | 5000万像素 | 远摄、演唱会神器 |\n\n### 💡 核心卖点\n- **2亿像素** 意味着照片放大再放大，细节依然清晰锐利！\n- 配合 **骁龙8至尊版** 处理器 + **Galaxy AI** 智能优化，夜景、人像、运动场景都能轻松驾驭 🚀\n- 还有 **6.9英寸QHD+ AMOLED 120Hz** 顶级屏幕，拍照后预览效果超震撼！\n\n### 💰 价格信息\n目前 **三星 Galaxy S25 Ultra 256GB** 在京东官方旗舰店的售价为 **9,699元**，妥妥的安卓机皇配置！\n\n如果您对这款手机还有其他疑问，比如拍照样张、续航表现、或者想和其他机型对比，随时问我哦～我很乐意帮您解答！😊",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 40740,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "oneplus_store",
+      "query": "一加13 256GB 是哪个店铺的商品？",
+      "answer": "好的，帮您查到啦！🌟\n\n**一加13 256GB** 这款手机目前在 **京东平台** 的 **一加官方旗舰店** 销售哦！🛒\n\n来给您简单介绍一下这款手机的亮点吧👇\n\n### 📱 一加13 256GB 核心信息\n| 项目 | 详情 |\n|------|------|\n| 💰 **价格** | **4,299元** |\n| 🏪 **店铺** | 一加官方旗舰店（京东） |\n| 🚀 **处理器** | 骁龙8至尊版 |\n| 📺 **屏幕** | 6.82英寸 2K BOE X2 OLED 屏 |\n| 📸 **相机** | 哈苏三摄（拍照超棒！） |\n| 🔋 **续航** | 6000mAh大电池 + 100W超级快充 |\n\n这款手机性能非常强悍，骁龙8至尊版处理器玩游戏、日常使用都流畅丝滑，加上哈苏影像系统拍照效果也很出色，还有6000mAh大电池续航一整天无压力！💪\n\n如果您对这款手机感兴趣，可以直接去京东的 **一加官方旗舰店** 看看哦～ 请问还有其他想了解的吗？😊",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 19505,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 1,
+      "retrieval_sources": [
+        "vector",
+        "graph"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "iphone16_platform",
+      "query": "Apple iPhone 16 128GB 国行正品 是哪个平台的？",
+      "answer": "亲爱的小伙伴，我来为你详细解答！🌟\n\n**Apple iPhone 16 128GB 国行正品** 是在 **淘宝平台** 的 **Apple天猫官方旗舰店** 销售的哦！📱✨\n\n以下是这款产品的详细信息，帮你一目了然👇\n\n---\n\n### 🛒 商品信息概览\n\n| 项目 | 内容 |\n|------|------|\n| **平台** | 淘宝（天猫） |\n| **店铺** | Apple天猫官方旗舰店 🏪 |\n| **价格** | **¥5,199** 💰 |\n| **发货地** | 上海 |\n| **存储** | 128GB |\n| **颜色选择** | 黑色、白色、粉色、青色、群青色 🌈 |\n\n### 🔥 核心卖点\n\n- **A18仿生芯片** — 性能强劲，日常使用超流畅 🚀\n- **6.1英寸Super Retina XDR OLED屏幕** — 色彩细腻，视觉体验绝佳\n- **4800万像素主摄 + 1200万超广角** — 拍照效果出色，记录生活美好瞬间 📸\n- **动态岛设计** — 交互更智能有趣\n- **USB-C接口** — 充电传输更方便\n- **支持Apple Intelligence** — 智能体验更进一步 🧠\n\n### 🎯 适合人群\n\n这款iPhone 16非常适合 **日常使用和轻度影像需求** 的用户，性价比非常高！如果你不是重度摄影或游戏发烧友，128GB版本完全够用啦~😊\n\n---\n\n### 💡 友情小提示\n\n如果你对拍照、视频剪辑有更高要求，也可以看看 **iPhone 16 Pro Max**（256GB版，¥9,999，京东平台有售），不过价格会贵不少哦～根据自己的需求和预算来选择就好！😉\n\n**还有什么想了解的吗？比如颜色、分期、保修等问题，随时问我哟！** 💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 11071,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 1,
+      "retrieval_sources": [
+        "vector",
+        "graph"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "pura70_satellite",
+      "query": "华为Pura 70 Ultra 512GB 有卫星通话吗？",
+      "answer": "来啦来啦！小鹏已经帮你查到啦～🌟\n\n**答案是：有的！华为Pura 70 Ultra 512GB 支持卫星通话功能！** 🛰️📞\n\n我给你详细介绍一下这款手机的核心亮点👇\n\n---\n\n### 📱 华为Pura 70 Ultra 512GB 核心信息\n\n| 项目 | 详情 |\n|------|------|\n| 💰 **价格** | **7,999元** |\n| 🛰️ **卫星通话** | ✅ **支持！** |\n| 📸 **摄像头** | 1英寸大底主摄 + **伸缩镜头**（拍照超强！） |\n| 🖥️ **屏幕** | 6.8英寸 LTPO OLED 旗舰屏 |\n| ⚡ **处理器** | 麒麟9010 芯片 |\n| 💾 **存储** | 512GB（日常完全够用） |\n\n---\n\n### 🆚 顺便对比一下另一款也有卫星通话的机型\n\n如果你对卫星通话功能特别看重，我顺便给你对比一下另一款热门机型——**华为 Mate 70 Pro+**：\n\n| 对比项 | 🔴 Pura 70 Ultra (512GB) | 🔵 Mate 70 Pro+ (256GB) |\n|--------|-----------------------|----------------------|\n| 💰 价格 | **7,999元** ✅ 更划算 | 8,999元 |\n| 🛰️ 卫星通话 | ✅ 支持 | ✅ 支持 |\n| 📸 拍照 | 1英寸主摄+**伸缩镜头** 🏆 | 5000万主摄+10倍光变 |\n| ⚡ 处理器 | 麒麟9010 | 麒麟9020（略新） |\n| 🔋 电池 | 旗舰级续航 | 5100mAh + 100W快充 |\n| 🎯 **适合人群** | **摄影发烧友、追求颜值** | **商务人士、华为生态用户** |\n\n---\n\n### 💡 小鹏的建议\n\n如果你平时**喜欢拍照、追求极致影像体验**，那 **Pura 70 Ultra** 的1英寸伸缩镜头绝对让你爱不释手，而且价格还便宜1000块，性价比很高！😍\n\n如果你更看重**综合性能、最新芯片和快充速度**，那 **Mate 70 Pro+** 也很棒～\n\n两款都支持卫星通话，在没信号的地方也能联系外界，安全感满满！🌟\n\n有什么其他想了解的吗？比如颜色、续航之类的，随时问我哦～😊",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 24037,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "lenovo_weight",
+      "query": "联想小新Pro 16 2025 锐龙版 32GB+1TB 重量是多少？",
+      "answer": "查到啦！来给你详细说说～😊\n\n---\n\n## 🖥️ 联想小新Pro 16 2025 锐龙版 32GB+1TB\n\n**重量：约 1.89kg**\n\n### 其他核心参数一览 🌟\n\n| 项目 | 规格 |\n|------|------|\n| 💰 **价格** | **5999元** |\n| ⚙️ **处理器** | AMD R7 8845H |\n| 🖥️ **屏幕** | 16英寸 2.5K分辨率 **120Hz高刷** IPS屏 |\n| 💾 **内存/硬盘** | 32GB + 1TB |\n| 🔋 **电池** | 75Wh大容量 |\n| ⚖️ **重量** | **约1.89kg** |\n\n### 小鹏的贴心解读 💡\n\n1.89kg对于一台 **16英寸大屏全能本** 来说，其实控制得相当不错啦！要知道这可是带独立数字小键盘的大尺寸机身，配上75Wh的大电池，日常通勤或者带去图书馆、咖啡厅学习办公，背着都不会觉得太沉哦～🎒\n\n而且**5999元**的价格就能拿下 **R7 8845H处理器 + 32GB大内存 + 1TB大硬盘**，性价比真的非常能打！无论是编程、剪辑、还是多开虚拟机，都能轻松驾驭～🚀\n\n### 对比一下更轻的选择 ✨\n\n如果你对重量特别在意，想要更轻便的话，同品牌的 **ThinkPad X1 Carbon 2025** 只有 **1.09kg**，轻了将近一半！不过价格是12999元，定位偏高端商务，屏幕也小一些（14英寸）。就看你是更看重 **大屏+性价比**，还是 **极致轻薄** 啦～😄\n\n还有什么想了解的吗？随时问我哦！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 22437,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    },
+    {
+      "mode": "current_system",
+      "query_id": "hp_screen",
+      "query": "惠普战66七代 锐龙版 16GB+512GB 的屏幕参数是什么？",
+      "answer": "好的，查到啦！来给你详细说说惠普战66七代 锐龙版 16GB+512GB的屏幕参数~ 🌟\n\n---\n\n### 🖥️ 屏幕参数一览\n\n| 项目 | 参数 |\n|------|------|\n| **屏幕尺寸** | **14英寸** |\n| **分辨率** | **1920×1200**（16:10比例，比传统16:9多显示一些内容，办公看文档更舒服哦~） |\n| **面板类型** | **IPS**（色彩好、可视角度广） |\n\n---\n\n### 💡 整体配置小总结\n\n除了屏幕，这款笔记本的完整配置也很亮眼：\n\n- **处理器**：AMD R5 8645HS（性能强劲又省电）\n- **内存**：16GB\n- **硬盘**：512GB SSD\n- **电池**：51Wh\n- **特色**：通过**军标认证**，坚固耐用 💪\n- **价格**：仅 **4299元**，性价比超高！\n\n---\n\n### ✨ 小鹏的推荐理由\n\n这款惠普战66七代锐龙版非常适合：\n- 🎓 **学生党** / 💼 **职场办公族**\n- 日常办公、上网课、看视频、写文档\n- 需要**便携耐用**、**长续航**的小伙伴\n\n16:10的屏幕比例比普通16:9能多显示几行内容，处理Excel、写论文、看网页都更舒服哦！😊\n\n如果你还有其他想了解的，比如这款和别的型号怎么选，随时问我！💖",
+      "status": "ok",
+      "error": null,
+      "latency_ms": 21013,
+      "worker_type": "product_worker",
+      "vector_hits": 5,
+      "graph_hits": 0,
+      "retrieval_sources": [
+        "vector"
+      ],
+      "correct": true
+    }
+  ]
+}

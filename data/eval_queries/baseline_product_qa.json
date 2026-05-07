@@ -1,0 +1,72 @@
+[
+  {
+    "id": "iphone16promax_price",
+    "query": "Apple iPhone 16 Pro Max 256GB 的价格是多少？",
+    "expected_all_of": ["9999"],
+    "expected_any_of": ["京东", "Apple官方旗舰店"],
+    "notes": "价格题"
+  },
+  {
+    "id": "mate70_chip",
+    "query": "华为 Mate 70 Pro+ 256GB 用的是什么芯片？",
+    "expected_all_of": ["麒麟9020"],
+    "expected_any_of": ["华为"],
+    "notes": "芯片题"
+  },
+  {
+    "id": "xiaomi15_screen",
+    "query": "小米15 Pro 256GB 的屏幕规格是什么？",
+    "expected_all_of": ["6.73英寸", "120Hz"],
+    "expected_any_of": ["2K AMOLED", "2K LTPO AMOLED"],
+    "notes": "屏幕规格题"
+  },
+  {
+    "id": "oppo_x8_ultra_battery",
+    "query": "OPPO Find X8 Ultra 512GB 的电池和快充怎么样？",
+    "expected_all_of": ["5800mAh", "100W"],
+    "expected_any_of": [],
+    "notes": "电池与快充题"
+  },
+  {
+    "id": "s25_camera",
+    "query": "三星 Galaxy S25 Ultra 256GB 的主摄像头像素是多少？",
+    "expected_all_of": ["2亿像素"],
+    "expected_any_of": ["三星", "Galaxy AI"],
+    "notes": "影像题"
+  },
+  {
+    "id": "oneplus_store",
+    "query": "一加13 256GB 是哪个店铺的商品？",
+    "expected_all_of": ["一加官方旗舰店"],
+    "expected_any_of": ["京东"],
+    "notes": "店铺题"
+  },
+  {
+    "id": "iphone16_platform",
+    "query": "Apple iPhone 16 128GB 国行正品 是哪个平台的？",
+    "expected_all_of": ["淘宝"],
+    "expected_any_of": ["Apple天猫官方旗舰店"],
+    "notes": "平台题"
+  },
+  {
+    "id": "pura70_satellite",
+    "query": "华为Pura 70 Ultra 512GB 有卫星通话吗？",
+    "expected_all_of": ["卫星通话"],
+    "expected_any_of": [],
+    "notes": "功能题"
+  },
+  {
+    "id": "lenovo_weight",
+    "query": "联想小新Pro 16 2025 锐龙版 32GB+1TB 重量是多少？",
+    "expected_all_of": ["1.89kg"],
+    "expected_any_of": [],
+    "notes": "重量题"
+  },
+  {
+    "id": "hp_screen",
+    "query": "惠普战66七代 锐龙版 16GB+512GB 的屏幕参数是什么？",
+    "expected_all_of": ["14英寸", "IPS"],
+    "expected_any_of": ["1920x1200", "1920×1200"],
+    "notes": "屏幕参数题"
+  }
+]

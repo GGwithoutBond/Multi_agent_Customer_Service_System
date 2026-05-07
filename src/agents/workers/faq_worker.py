@@ -1,7 +1,4 @@
-"""
-FAQ Worker Agent
-处理常见问题查询，结合 GraphRAG 检索知识库
-"""
+"""FAQ worker backed by optional knowledge retrieval."""
 
 from typing import Any
 
@@ -16,20 +13,18 @@ logger = get_logger(__name__)
 
 
 class FAQWorker(BaseWorker):
-    """FAQ 处理 Worker"""
+    """Handle FAQ-style requests with optional retrieval support."""
 
     def __init__(self):
         super().__init__(
             name="faq_worker",
-            description="处理常见问题查询，基于知识库检索回答",
+            description="Handle FAQ-style requests with knowledge retrieval support.",
         )
 
     async def handle(self, user_input: str, context: dict[str, Any], history: str = "") -> str:
-        """FAQ 处理逻辑"""
-        # 1. 从 RAG 模块检索相关知识
-        rag_context = await self._retrieve_knowledge(user_input)
+        """Generate a response from the worker prompt and retrieval context."""
+        rag_context = await self._retrieve_knowledge(user_input, context)
 
-        # 2. 使用 LLM 生成回答（含对话历史）
         llm_client = get_llm_client()
         prompt = FAQ_WORKER_PROMPT.format(
             persona=self._get_persona(context),
@@ -40,18 +35,30 @@ class FAQWorker(BaseWorker):
         response = await llm_client.invoke([HumanMessage(content=prompt)])
         return response
 
-    async def _retrieve_knowledge(self, query: str) -> str:
-        """从知识库检索相关信息"""
+    async def _retrieve_knowledge(self, query: str, context: dict[str, Any]) -> str:
+        """Fetch retrieval context unless the caller disables it for evaluation."""
+        enable_retrieval = context.get("enable_retrieval", True)
+        if not enable_retrieval:
+            return "Knowledge retrieval disabled for this run. Answer from general knowledge only."
+
+        use_vector = context.get("use_vector", True)
+        use_graph = context.get("use_graph", True)
+        use_reranker = context.get("use_reranker", True)
+
         try:
             from src.rag.retriever import HybridRetriever
+
             retriever = HybridRetriever()
-            results = await retriever.retrieve(query, top_k=5)
+            results = await retriever.retrieve(
+                query,
+                top_k=5,
+                use_vector=use_vector,
+                use_graph=use_graph,
+                use_reranker=use_reranker,
+            )
             if results:
-                return "\n\n".join(
-                    f"[{i+1}] {doc['content']}"
-                    for i, doc in enumerate(results)
-                )
-            return "未找到相关知识库内容。"
-        except Exception as e:
-            logger.warning("知识库检索失败: %s，将使用 LLM 直接回答", e)
-            return "知识库暂不可用，请基于通用知识回答。"
+                return "\n\n".join(f"[{i + 1}] {doc['content']}" for i, doc in enumerate(results))
+            return "No matching knowledge-base content was found."
+        except Exception as exc:
+            logger.warning("Knowledge retrieval failed, falling back to direct LLM answer: %s", exc)
+            return "Knowledge retrieval is temporarily unavailable. Answer from general knowledge only."

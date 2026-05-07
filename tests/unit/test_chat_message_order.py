@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.core.exceptions import AgentError
+from src.models.conversation import ConversationChannel, ConversationStatus
 from src.models.message import MessageRole
 from src.services.chat_service import ChatService
 
@@ -90,3 +91,19 @@ async def test_process_message_error_created_at_not_earlier_than_user():
     assert user_role == MessageRole.USER
     assert error_role == MessageRole.ASSISTANT
     assert error_created >= user_created
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_conversation_sets_is_pinned_false_for_new_conversation():
+    service = ChatService(db=AsyncMock())
+    service.conv_repo = AsyncMock()
+    service.conv_repo.get_by_id = AsyncMock(return_value=None)
+    service.conv_repo.create = AsyncMock(return_value=SimpleNamespace(id=uuid4()))
+
+    result = await service._get_or_create_conversation(conversation_id=None, user_id=None)
+
+    created_conv = service.conv_repo.create.await_args.args[0]
+    assert result.id is not None
+    assert created_conv.channel == ConversationChannel.WEB
+    assert created_conv.status == ConversationStatus.ACTIVE
+    assert created_conv.is_pinned is False

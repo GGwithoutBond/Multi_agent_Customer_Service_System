@@ -35,6 +35,7 @@ class ConversationService:
             user_id=user_id,
             channel=ConversationChannel(channel),
             status=ConversationStatus.ACTIVE,
+            is_pinned=False,
             metadata_=metadata or {},
         )
         conv = await self.conv_repo.create(conv)

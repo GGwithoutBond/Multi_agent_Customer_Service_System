@@ -131,7 +131,12 @@ interface StructuredBlock {
   title: string
   items: string[]
   metrics?: StructuredMetric[]
+  markdown?: string
 }
+
+const RECOMMENDATION_HEADER_REGEX = /(推荐机型|机型一览|推荐清单|对比推荐|推荐方案)/i
+const PRICE_LINE_REGEX = /(?:^|[\s|])(?:¥|￥)\s?\d[\d,]*(?:\.\d+)?/
+const FEATURE_LINE_REGEX = /^(拍照|续航|影像系统|电池|屏幕|芯片|适用场景|核心亮点|推荐理由)[：:]/
 
 const STATUS_REGEX = /(delivered|shipped|processing|pending|cancelled|refunding|completed|signed|\u5df2\u7b7e\u6536|\u5df2\u53d1\u8d27|\u5904\u7406\u4e2d|\u5f85\u4ed8\u6b3e|\u9000\u6b3e\u4e2d|\u5df2\u5b8c\u6210)/gi
 const DATE_REGEX = /(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{1,2})?)/g
@@ -172,6 +177,9 @@ const parseStructuredBlocks = (content: string): StructuredBlock[] => {
 
   const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean)
   if (!lines.length) return []
+
+  const recommendationBlocks = parseRecommendationBlocks(lines)
+  if (recommendationBlocks.length > 0) return recommendationBlocks
 
   const sectionMap: Record<StructuredKind, RegExp> = {
     conclusion: /(conclusion|summary|answer|result|\u7ed3\u8bba|\u603b\u7ed3|\u7b54\u6848|\u5904\u7406\u7ed3\u679c)/i,
@@ -259,11 +267,80 @@ const parseStructuredBlocks = (content: string): StructuredBlock[] => {
   return hasStructuredSignal ? blocks : []
 }
 
+const parseRecommendationBlocks = (lines: string[]): StructuredBlock[] => {
+  const blocks: StructuredBlock[] = []
+  const summaryItems: string[] = []
+  const detailItems: string[] = []
+  const metrics: StructuredMetric[] = []
+  let hasRecommendationSignal = false
+
+  for (const line of lines) {
+    if (RECOMMENDATION_HEADER_REGEX.test(line)) {
+      hasRecommendationSignal = true
+      continue
+    }
+
+    if (PRICE_LINE_REGEX.test(line)) {
+      hasRecommendationSignal = true
+      summaryItems.push(line.replace(/^\d+[.)]\s*/, '').trim())
+      continue
+    }
+
+    if (FEATURE_LINE_REGEX.test(line)) {
+      hasRecommendationSignal = true
+      const matched = line.match(/^([^：:]+)[：:]\s*(.+)$/)
+      if (matched) {
+        metrics.push({
+          label: matched[1].trim(),
+          value: matched[2].trim(),
+        })
+      } else {
+        detailItems.push(line)
+      }
+      continue
+    }
+
+    if (hasRecommendationSignal) {
+      detailItems.push(line)
+    }
+  }
+
+  if (!hasRecommendationSignal) return []
+
+  if (summaryItems.length > 0) {
+    blocks.push({
+      kind: 'conclusion',
+      title: '推荐机型',
+      items: dedupe(summaryItems),
+    })
+  }
+
+  if (metrics.length > 0) {
+    blocks.push({
+      kind: 'data',
+      title: '亮点速览',
+      items: [],
+      metrics,
+    })
+  }
+
+  if (detailItems.length > 0) {
+    blocks.push({
+      kind: 'steps',
+      title: '详细说明',
+      items: [],
+      markdown: detailItems.join('\n'),
+    })
+  }
+
+  return blocks
+}
+
 const finalizeAssistantMessage = (msg: any) => {
   if (!msg || msg.role !== 'assistant') return
   const text = (msg.content || '').trim()
   if (!text) return
-  msg.structuredBlocks = []
+  msg.structuredBlocks = parseStructuredBlocks(text)
   msg.renderedHtml = renderMarkdown(text)
 }
 
@@ -1231,6 +1308,25 @@ const handleSend = async (options: SendOptions = {}) => {
               if (conversationId.value !== streamConversationId) {
                 conversationId.value = streamConversationId
                 router.replace(`/chat/${streamConversationId}`)
+              }
+              // 后端随 meta 事件返回快速标题（基于用户首条消息即时生成）
+              // 直接写入本地 conversations 列表，侧边栏瞬间更新，无需等待模型回复
+              if (data.title) {
+                const existing = conversations.value.find((c: any) => c.id === streamConversationId)
+                if (existing) {
+                  existing.title = data.title
+                } else {
+                  // 新会话首次出现，添加到列表顶部
+                  conversations.value.unshift({
+                    id: streamConversationId,
+                    title: data.title,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    is_pinned: false,
+                  })
+                }
+              } else {
+                // 没有标题时仅刷新列表（兜底）
                 void fetchConversationList()
               }
             }
@@ -1253,16 +1349,6 @@ const handleSend = async (options: SendOptions = {}) => {
             streamDone = true
             if (data.message_id) {
               messages.value[aiMessageIndex].message_id = data.message_id
-            }
-            // 后端返回了自动生成的标题，直接更新侧边栏，避免等待重新拉取列表
-            if (data.title && streamConversationId) {
-              const existing = conversations.value.find((c: any) => c.id === streamConversationId)
-              if (existing) {
-                existing.title = data.title
-              } else {
-                // 新会话尚未在列表中，触发一次列表刷新
-                void fetchConversationList()
-              }
             }
           } else if (data.type === 'action_buttons' && data.actions) {
             if (data.content) {
@@ -1674,8 +1760,13 @@ onUnmounted(() => {
                     :class="`kind-${block.kind}`"
                   >
                     <div class="card-title">{{ block.title }}</div>
+                    <div
+                      v-if="block.markdown"
+                      class="card-markdown"
+                      v-html="renderMarkdown(block.markdown)"
+                    ></div>
                     <ul v-if="block.items && block.items.length > 0" class="card-list">
-                      <li v-for="(item, ii) in block.items" :key="ii">{{ item }}</li>
+                      <li v-for="(item, ii) in block.items" :key="ii" v-html="renderMarkdown(item)"></li>
                     </ul>
                     <div v-if="block.metrics && block.metrics.length > 0" class="metric-grid">
                       <div v-for="(metric, mi) in block.metrics" :key="mi" class="metric-item">
@@ -2669,6 +2760,41 @@ onUnmounted(() => {
 .card-list li {
   color: var(--text-primary);
   line-height: 1.65;
+}
+
+.card-markdown {
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+.card-markdown :deep(p) {
+  margin: 0 0 12px;
+}
+
+.card-markdown :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 12px;
+  font-size: 14px;
+}
+
+.card-markdown :deep(th),
+.card-markdown :deep(td) {
+  border: 1px solid #e3e8f3;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.card-markdown :deep(th) {
+  background: #f6f8fc;
+  font-weight: 700;
+}
+
+.card-markdown :deep(hr) {
+  border: none;
+  border-top: 1px solid #e3e8f3;
+  margin: 12px 0;
 }
 
 .metric-grid {

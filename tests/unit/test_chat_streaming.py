@@ -38,6 +38,8 @@ async def test_stream_emits_meta_with_conversation_id(mock_get_settings):
 
     service = ChatService(db=AsyncMock())
     service._get_or_create_conversation = AsyncMock(return_value=SimpleNamespace(id=conv_id))
+    service.conv_repo = AsyncMock()
+    service.conv_repo.update_by_id = AsyncMock()
     service.msg_repo = AsyncMock()
     service.msg_repo.create = AsyncMock(side_effect=[SimpleNamespace(id=uuid4()), SimpleNamespace(id=done_message_id)])
     service.memory_manager = AsyncMock()
@@ -86,6 +88,8 @@ async def test_stream_done_before_async_postprocess(mock_get_settings, mock_crea
 
     service = ChatService(db=AsyncMock())
     service._get_or_create_conversation = AsyncMock(return_value=SimpleNamespace(id=conv_id))
+    service.conv_repo = AsyncMock()
+    service.conv_repo.update_by_id = AsyncMock()
     service.msg_repo = AsyncMock()
     service.msg_repo.create = AsyncMock(side_effect=[SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())])
     service.memory_manager = AsyncMock()
@@ -154,6 +158,8 @@ async def test_stream_high_risk_uses_sync_quality_review(
 
     service = ChatService(db=AsyncMock())
     service._get_or_create_conversation = AsyncMock(return_value=SimpleNamespace(id=conv_id))
+    service.conv_repo = AsyncMock()
+    service.conv_repo.update_by_id = AsyncMock()
     service.msg_repo = AsyncMock()
     service.msg_repo.create = AsyncMock(side_effect=[SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())])
     service.memory_manager = AsyncMock()
@@ -176,8 +182,8 @@ async def test_stream_high_risk_uses_sync_quality_review(
 
     assert chunks[-1].type == "done"
     assert service._run_async_quality_review.await_count == 1
-    # only postprocess should be scheduled asynchronously in high-risk sync-review path
-    assert mock_create_task.call_count == 1
+    # first-turn summary + postprocess are scheduled asynchronously in high-risk sync-review path
+    assert mock_create_task.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -222,6 +228,8 @@ async def test_stream_normal_uses_async_quality_review(
 
     service = ChatService(db=AsyncMock())
     service._get_or_create_conversation = AsyncMock(return_value=SimpleNamespace(id=conv_id))
+    service.conv_repo = AsyncMock()
+    service.conv_repo.update_by_id = AsyncMock()
     service.msg_repo = AsyncMock()
     service.msg_repo.create = AsyncMock(side_effect=[SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())])
     service.memory_manager = AsyncMock()
@@ -244,8 +252,8 @@ async def test_stream_normal_uses_async_quality_review(
 
     assert chunks[-1].type == "done"
     assert service._run_async_quality_review.await_count == 0
-    # async quality review + async postprocess
-    assert mock_create_task.call_count == 2
+    # first-turn summary + async quality review + async postprocess
+    assert mock_create_task.call_count == 3
     user_created_at = service.msg_repo.create.await_args_list[0].args[0].created_at
     assistant_created_at = service.msg_repo.create.await_args_list[1].args[0].created_at
     assert user_created_at < assistant_created_at

@@ -5,9 +5,11 @@
 """
 
 import asyncio
+import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, AsyncIterator, List, Optional
 from uuid import UUID
 
@@ -48,6 +50,78 @@ class ChatService:
         self.memory_manager = MemoryManager(db_session=db)
         self.semantic_cache = SemanticCache()
         self.summary_agent = SummaryAgent()
+
+    async def get_available_orders(self, user_id: Optional[UUID] = None) -> list[dict[str, Any]]:
+        """Return order picker options for the current user."""
+        taobao_user = await self._get_taobao_user_data(user_id)
+        orders = taobao_user.orders if taobao_user and isinstance(taobao_user.orders, list) else []
+
+        options: list[dict[str, Any]] = []
+        for order in orders[:20]:
+            order_id = str(order.get("order_id") or "").strip()
+            if not order_id:
+                continue
+            options.append(
+                {
+                    "order_id": order_id,
+                    "name": str(order.get("product") or order_id),
+                    "status": str(order.get("return_status") or order.get("status") or "未知状态"),
+                    "price": float(order.get("amount") or 0),
+                    "date": order.get("order_date") or order.get("created_at"),
+                }
+            )
+        return options
+
+    async def get_available_products(self, user_id: Optional[UUID] = None) -> list[dict[str, Any]]:
+        """Return product picker options from the user's recent orders, with file fallback."""
+        taobao_user = await self._get_taobao_user_data(user_id)
+        orders = taobao_user.orders if taobao_user and isinstance(taobao_user.orders, list) else []
+
+        options: list[dict[str, Any]] = []
+        seen_product_ids: set[str] = set()
+        for order in orders:
+            product_id = str(order.get("product_id") or "").strip()
+            if not product_id or product_id in seen_product_ids:
+                continue
+            seen_product_ids.add(product_id)
+            options.append(
+                {
+                    "product_id": product_id,
+                    "name": str(order.get("product") or product_id),
+                    "price": float(order.get("amount") or 0),
+                    "category": order.get("category"),
+                    "image": order.get("image"),
+                }
+            )
+
+        if options:
+            return options[:20]
+
+        data_path = Path(__file__).resolve().parents[2] / "data" / "taobao_electronics_latest.json"
+        if not data_path.exists():
+            return []
+
+        try:
+            products = json.loads(data_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Failed to load product options from %s: %s", data_path, exc)
+            return []
+
+        fallback_options: list[dict[str, Any]] = []
+        for product in products[:20]:
+            product_id = str(product.get("sku_id") or product.get("product_id") or "").strip()
+            if not product_id:
+                continue
+            fallback_options.append(
+                {
+                    "product_id": product_id,
+                    "name": str(product.get("name") or product_id),
+                    "price": float(product.get("price") or 0),
+                    "category": product.get("category"),
+                    "image": product.get("image") or product.get("url"),
+                }
+            )
+        return fallback_options
 
     @staticmethod
     def _next_message_ts(last_ts: Optional[datetime]) -> datetime:
@@ -163,6 +237,7 @@ class ChatService:
             )
             last_message_ts = ai_msg.created_at
             ai_msg = await self.msg_repo.create(ai_msg)
+            await self.db.commit()
 
             # 7. 更新记忆（含用户画像自动提取）
             await self.memory_manager.save_turn(
@@ -173,7 +248,7 @@ class ChatService:
             )
 
             # 8. 更新会话标题（首次对话）
-            if not conversation.title:
+            if not getattr(conversation, "title", None):
                 title = message[:50] + ("..." if len(message) > 50 else "")
                 await self.conv_repo.update_by_id(conversation.id, title=title)
 
@@ -222,8 +297,21 @@ class ChatService:
             conversation_id, user_id
         )
 
-        # 首包固定发送 meta，前端据此绑定 conversation_id
-        yield ChatStreamChunk(type="meta", conversation_id=conversation.id)
+        # 新会话：立刻用用户首条消息生成快速标题，写入 DB，随 meta 返回前端
+        # 这样侧边栏在用户提交的瞬间就能看到标题，无需等待 AI 回复
+        quick_title: Optional[str] = None
+        if not getattr(conversation, "title", None):
+            raw = (message or '').strip()
+            if raw:
+                quick_title = raw[:50] + ('...' if len(raw) > 50 else '')
+                try:
+                    await self.conv_repo.update_by_id(conversation.id, title=quick_title)
+                    conversation.title = quick_title
+                except Exception as _te:
+                    logger.warning("快速标题写入失败: %s", _te)
+                    quick_title = None
+
+        # 首包固定发送 meta，前端据此绑定 conversation_id 并立即更新侧边栏标题
 
         # 保存用户消息（含附件元信息）
         msg_metadata = {}
@@ -238,8 +326,10 @@ class ChatService:
         )
         last_message_ts = user_msg.created_at
         await self.msg_repo.create(user_msg)
+        await self.db.commit()
 
         try:
+            yield ChatStreamChunk(type="meta", conversation_id=conversation.id, title=quick_title)
             # 加载上下文
             history_messages = await self.memory_manager.load_context(
                 conversation_id=str(conversation.id),
@@ -274,6 +364,7 @@ class ChatService:
                     )
                     last_message_ts = ai_msg.created_at
                     ai_msg = await self.msg_repo.create(ai_msg)
+                    await self.db.commit()
                     yield ChatStreamChunk(type="done", message_id=ai_msg.id)
                     if settings.ENABLE_ASYNC_POSTPROCESS:
                         asyncio.create_task(
@@ -434,21 +525,18 @@ class ChatService:
             )
             last_message_ts = ai_msg.created_at
             ai_msg = await self.msg_repo.create(ai_msg)
+            await self.db.commit()
 
-            # 生成会话标题（首轮对话）并随 done 事件返回给前端
-            generated_title: Optional[str] = None
-            if not conversation.title:
-                try:
-                    await self._finalize_first_turn_summary(
+            # AI 回复完成后，后台异步精化标题（用 SummaryAgent 生成更准确的语义标题）
+            # 仅在快速标题已设置（首轮对话）时触发，不阻塞当前请求
+            if quick_title:
+                asyncio.create_task(
+                    self._finalize_first_turn_summary(
                         conversation=conversation,
                         user_message=message,
                         assistant_message=full_response,
                     )
-                    # 读取刚写入的标题
-                    updated_conv = await self.conv_repo.get_by_id(conversation.id)
-                    generated_title = getattr(updated_conv, "title", None) or None
-                except Exception as title_exc:
-                    logger.warning("标题生成失败（不影响主流程）: %s", title_exc)
+                )
 
             review_state = {
                 "intent": detected_intent,
@@ -464,7 +552,7 @@ class ChatService:
             elif QualityAgent.should_run_async_review(review_state):
                 asyncio.create_task(self._run_async_quality_review(review_state))
 
-            yield ChatStreamChunk(type="done", message_id=ai_msg.id, title=generated_title)
+            yield ChatStreamChunk(type="done", message_id=ai_msg.id)
             if settings.ENABLE_ASYNC_POSTPROCESS:
                 asyncio.create_task(
                     self._run_stream_postprocess(
@@ -793,5 +881,19 @@ class ChatService:
             user_id=user_id,
             channel=ConversationChannel.WEB,
             status=ConversationStatus.ACTIVE,
+            is_pinned=False,
         )
         return await self.conv_repo.create(conv)
+
+    async def _get_taobao_user_data(self, user_id: Optional[UUID]) -> Optional[TaobaoUserData]:
+        """Prefer user-bound Taobao data; fall back to the latest synced record."""
+        if user_id:
+            stmt = select(TaobaoUserData).where(TaobaoUserData.user_id == user_id)
+            result = await self.db.execute(stmt)
+            row = result.scalars().first()
+            if row:
+                return row
+
+        stmt = select(TaobaoUserData).order_by(TaobaoUserData.last_synced_at.desc())
+        result = await self.db.execute(stmt)
+        return result.scalars().first()

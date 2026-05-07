@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.exceptions import NotFoundError
+from src.models.conversation import ConversationChannel, ConversationStatus
 from src.services.conversation_service import ConversationService
 
 
@@ -78,6 +79,24 @@ async def test_update_pin_for_user_calls_update_with_flag():
         user_id,
         is_pinned=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_create_conversation_sets_is_pinned_false():
+    conversation_id = uuid4()
+
+    service = ConversationService(db=AsyncMock())
+    service.conv_repo = AsyncMock()
+    service.conv_repo.create = AsyncMock(return_value=SimpleNamespace(id=conversation_id))
+
+    result = await service.create_conversation(user_id=None, channel="web", metadata={"source": "test"})
+
+    created_conv = service.conv_repo.create.await_args.args[0]
+    assert result.id == conversation_id
+    assert created_conv.channel == ConversationChannel.WEB
+    assert created_conv.status == ConversationStatus.ACTIVE
+    assert created_conv.is_pinned is False
+    assert created_conv.metadata_ == {"source": "test"}
 
 
 @pytest.mark.asyncio
